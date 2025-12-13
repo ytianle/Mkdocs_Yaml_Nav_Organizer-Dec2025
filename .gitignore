@@ -4,5 +4,5 @@ __pycache__/
 *.pyc
 
 .page_tree_state.json
-page_tree_app/backups/
-page_tree_app/.page_tree_state.json
+MkDocs_Nav_Manager/backups/
+MkDocs_Nav_Manager/.page_tree_state.json

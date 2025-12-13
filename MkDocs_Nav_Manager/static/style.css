@@ -307,7 +307,7 @@ body.theme-light #tree .node.dir {
   border-color: rgba(11, 18, 32, 0.10);
 }
 
-body.theme-light #tree .node.dir > ul {
+body.theme-light #tree .node.dir>ul {
   border-top-color: rgba(11, 18, 32, 0.08);
   border-left-color: rgba(11, 18, 32, 0.10);
 }

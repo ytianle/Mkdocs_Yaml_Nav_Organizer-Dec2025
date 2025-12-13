@@ -42,6 +42,8 @@ def _now_stamp() -> str:
 
 
 def _backup_file(path: Path) -> Path | None:
+    if str(os.environ.get("MKDOCS_BACKUP", "1")).strip().lower() in {"0", "false", "no", "off"}:
+        return None
     if not path.exists():
         return None
     backup_dir = BASE_DIR / "backups" / "mkdocs"
@@ -452,10 +454,18 @@ def _compute_folder_dir(ancestors: list[Node]) -> str:
 
 def _plan_file_sync(
     nodes: list[Node], *, create_missing: bool
-) -> tuple[list[tuple[Path, Path]], list[tuple[Path, Path]], list[dict[str, Any]]]:
+) -> tuple[
+    list[tuple[Path, Path]],
+    list[tuple[Path, Path]],
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
     page_moves: list[tuple[Path, Path]] = []
     asset_moves: list[tuple[Path, Path]] = []
     warnings: list[dict[str, Any]] = []
+    collisions: list[dict[str, Any]] = []
+    planned_sources: set[Path] = set()
+    planned_targets: set[Path] = set()
 
     def walk(items: list[Node], ancestors: list[Node]):
         folder_dir = _compute_folder_dir(ancestors)
@@ -478,6 +488,18 @@ def _plan_file_sync(
                     node.file_prev = None
                 continue
 
+            planned_sources.add(src.resolve())
+            # Detect internal duplicates early.
+            if dst.resolve() in planned_targets and dst.resolve() != src.resolve():
+                collisions.append(
+                    {
+                        "type": "duplicate_target",
+                        "target": desired_rel,
+                        "title": node.title,
+                    }
+                )
+            planned_targets.add(dst.resolve())
+
             if src != dst:
                 page_moves.append((src, dst))
                 # Confluence-like "relative sync": also move a sibling asset folder named after the stem.
@@ -489,8 +511,24 @@ def _plan_file_sync(
             node.file_prev = None
 
     walk(nodes, [])
+
+    # Detect collisions with existing files/dirs that are not part of the move plan.
+    planned_sources |= {s.resolve() for s, _ in asset_moves}
+    for _, dst in page_moves + asset_moves:
+        dst_res = dst.resolve()
+        if dst.exists() and dst_res not in planned_sources:
+            collisions.append(
+                {
+                    "type": "exists",
+                    "target": dst.relative_to(DOCS_ROOT).as_posix(),
+                }
+            )
+
+    if collisions:
+        return [], [], warnings, collisions
+
     _ensure_unique_targets(page_moves + asset_moves)
-    return page_moves, asset_moves, warnings
+    return page_moves, asset_moves, warnings, []
 
 
 def _apply_moves(moves: list[tuple[Path, Path]]) -> list[dict[str, str]]:
@@ -836,7 +874,6 @@ def api_sync():
     try:
         if isinstance(payload.get("tree"), list):
             nodes = [_node_from_dict(item) for item in payload["tree"]]
-            _save_state(nodes)
         else:
             nodes = _load_state()
     except Exception as exc:
@@ -846,8 +883,10 @@ def api_sync():
     moves_applied: list[dict[str, str]] = []
 
     if mode == "sync_files":
-        page_moves, asset_moves, plan_warnings = _plan_file_sync(nodes, create_missing=create_missing)
+        page_moves, asset_moves, plan_warnings, collisions = _plan_file_sync(nodes, create_missing=create_missing)
         warnings.extend(plan_warnings)
+        if collisions:
+            return _json_error("File move blocked: target already exists.", 409, collisions=collisions)
         try:
             moves_applied.extend(_apply_moves(page_moves))
             moves_applied.extend(_apply_moves(asset_moves))
@@ -859,7 +898,7 @@ def api_sync():
         desired_dirs = _collect_desired_folder_dirs(nodes)
         _ensure_desired_folder_dirs_exist(desired_dirs)
         _cleanup_stray_empty_dirs(DOCS_ROOT, keep_rel_dirs=desired_dirs)
-        _save_state(nodes)
+        # Do not persist state until after mkdocs.yml is written successfully.
 
     # Always write mkdocs.yml nav from current state (nav_only uses existing page.file)
     try:
@@ -871,6 +910,9 @@ def api_sync():
         backup = _save_mkdocs_config(MKDOCS_PATH, config)
     except Exception as exc:
         return _json_error(f"Failed to write mkdocs.yml: {exc}", 500)
+
+    # Only persist state after mkdocs write succeeds.
+    _save_state(nodes)
 
     return jsonify(
         {
