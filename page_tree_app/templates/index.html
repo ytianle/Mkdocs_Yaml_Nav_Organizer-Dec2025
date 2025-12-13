@@ -9,65 +9,108 @@
 </head>
 
 <body>
-  <div class="shell">
-    <header class="toolbar">
-      <div class="title">
-        <h1>Page Tree</h1>
-        <div id="meta" class="muted">Loading...</div>
-      </div>
-      <div class="actions">
-        <div class="group">
-          <button id="undo-btn" type="button" title="Undo">↩️ Undo</button>
-          <button id="redo-btn" type="button" title="Redo">↪️ Redo</button>
-          <button id="reload-btn" type="button" title="Reload from saved state">🔄 Reload</button>
-        </div>
-        <div class="group">
-          <button id="import-btn" type="button" title="Import nav from mkdocs.yml">📥 Import</button>
-          <button id="save-state-btn" type="button" title="Save tree draft">💾 Save</button>
-          <button id="sync-nav-btn" type="button" title="Write mkdocs.yml nav (no file moves)">🧭 Sync Nav</button>
-          <button id="sync-files-btn" type="button" title="Write mkdocs.yml and move files">📦 Sync Files</button>
-          <button id="debug-toggle" type="button" class="ghost" title="Toggle debug panel">🐞 Debug</button>
-        </div>
-      </div>
-    </header>
+	  <div class="shell">
+	    <header class="toolbar">
+	      <div class="title">
+	        <h1>Page Tree</h1>
+	        <div id="meta" class="muted">Loading...</div>
+	      </div>
+	    </header>
 
-    <main class="panes">
-      <section class="card">
-        <div class="card-head">
-          <h2>Source</h2>
-          <div class="inline-actions">
-            <span class="muted">Click to locate in tree</span>
-            <button id="source-view-btn" type="button" class="ghost" title="Toggle ASCII tree view">🧾 ASCII</button>
+	    <div id="tool-tooltip" class="tool-tooltip" hidden></div>
+
+	    <div id="workspace" class="workspace">
+	      <section class="card panel dock-tools" id="panel-tools">
+	        <div class="card-head">
+	          <h2>🛠 Tools</h2>
+	          <span class="muted">Hover for hints</span>
+	        </div>
+	        <div class="list-shell tools-body tools-dock-body">
+	          <div class="tools-buttons">
+	            <button id="tool-undo" type="button" class="ghost" data-help="Undo last change">⏪ Undo</button>
+	            <button id="tool-redo" type="button" class="ghost" data-help="Redo last undone change">⏩ Redo</button>
+	            <button id="tool-reload" type="button" class="ghost" data-help="Reload tree from saved state (may discard edits)">↩️ Reload</button>
+	            <button id="tool-import" type="button" class="ghost" data-help="Import nav from mkdocs.yml (overwrites current tree)">📥 Import</button>
+	            <button id="tool-save" type="button" class="ghost" data-help="Save draft to .page_tree_state.json (does not change mkdocs.yml)">📝 Save Draft</button>
+	            <button id="tool-sync-nav" type="button" class="ghost" data-help="Write mkdocs.yml nav only (no file moves)">🔃 Sync Nav Only</button>
+	            <button id="tool-sync-files" type="button" class="ghost" data-help="Write mkdocs.yml and move files to match tree">🔄 Sync Files</button>
+	            <button id="tool-debug" type="button" class="ghost" data-help="Toggle debug window (DnD logs)">🧪 Debug</button>
+	          </div>
+	        </div>
+	      </section>
+
+      <div class="main-grid">
+        <section class="card panel" id="panel-source">
+	          <div class="card-head">
+	            <h2>Source</h2>
+	            <div class="inline-actions">
+	              <span class="muted">Click to locate in tree</span>
+	              <button id="source-view-btn" type="button" class="ghost" data-help="Toggle source view (Explorer / ASCII)">🧾 ASCII</button>
+	            </div>
+	          </div>
+          <div id="source" class="list-shell">Loading...</div>
+        </section>
+
+        <div class="splitter splitter-v" id="split-main-left" title="Drag to resize"></div>
+
+        <section class="card panel" id="panel-tree">
+	          <div class="card-head">
+	            <h2>📚 Doc Tree</h2>
+	            <div class="inline-actions">
+	              <div class="segmented" role="group" aria-label="Depth limit">
+	                <button type="button" class="ghost depth-btn" data-depth="1" data-help="Show 1 level">1</button>
+	                <button type="button" class="ghost depth-btn" data-depth="2" data-help="Show 2 levels">2</button>
+	                <button type="button" class="ghost depth-btn" data-depth="3" data-help="Show 3 levels">3</button>
+	                <button type="button" class="ghost depth-btn" data-depth="4" data-help="Show 4 levels">4</button>
+	                <button type="button" class="ghost depth-btn" data-depth="5" data-help="Show 5 levels">5</button>
+	                <button type="button" class="ghost depth-btn" data-depth="n" data-help="Show all levels">∞</button>
+	              </div>
+	              <button id="new-folder-btn" type="button" data-help="Create a new section under selection">➕📁 New Section</button>
+	              <button id="new-page-btn" type="button" data-help="Create a new page under selection">➕📄 New Page</button>
+	              <button id="delete-btn" type="button" data-help="Delete selected node (tree only)">🗑️ Delete</button>
+	            </div>
+	          </div>
+          <div id="tree" class="list-shell">Loading...</div>
+        </section>
+      </div>
+
+      <div class="splitter splitter-h" id="split-bottom" title="Drag to resize"></div>
+
+      <div class="bottom-stack debug-hidden" id="bottom-stack">
+	        <section class="card panel" id="panel-info">
+	          <div class="card-head">
+	            <h2>ℹ️ Info</h2>
+	            <span class="muted">Hover tools for hints</span>
+	          </div>
+	          <div class="list-shell info-body">
+	            <div id="status" class="status-box" data-type="info"></div>
+	            <div class="info-pills">
+	              <div id="info-meta-pill" class="info-pill" title=""></div>
+	              <div id="info-selection-pill" class="info-pill" title=""></div>
+	            </div>
+	            <details id="info-details" class="info-details">
+	              <summary class="info-summary">More</summary>
+	              <div id="info-meta" class="info-line"></div>
+	              <div id="info-selection" class="info-line"></div>
+	            </details>
+	            <div id="info-hover" class="info-hint" hidden></div>
+	          </div>
+	        </section>
+
+        <div class="splitter splitter-h" id="split-info-debug" title="Drag to resize debug height"></div>
+
+        <section id="debug-panel" class="card panel debug-panel" hidden>
+          <div class="debug-head">
+            <div class="debug-title">DnD Debug</div>
+            <div class="debug-actions">
+              <button id="debug-clear" type="button" class="ghost">Clear</button>
+              <button id="debug-copy" type="button" class="ghost">Copy</button>
+            </div>
           </div>
-        </div>
-        <div id="source" class="list-shell">Loading...</div>
-      </section>
-
-      <section class="card">
-        <div class="card-head">
-          <h2>📚 Doc Tree</h2>
-          <div class="inline-actions">
-            <button id="new-folder-btn" type="button">New Section</button>
-            <button id="new-page-btn" type="button">New Page</button>
-            <button id="rename-btn" type="button">Rename</button>
-            <button id="delete-btn" type="button">Delete</button>
-          </div>
-        </div>
-        <div id="tree" class="list-shell">Loading...</div>
-      </section>
-    </main>
-
-    <footer id="status" data-type="info"></footer>
-    <section id="debug-panel" class="debug-panel" hidden>
-      <div class="debug-head">
-        <div class="debug-title">DnD Debug</div>
-        <div class="debug-actions">
-          <button id="debug-clear" type="button" class="ghost">Clear</button>
-          <button id="debug-copy" type="button" class="ghost">Copy</button>
-        </div>
+          <pre id="debug-log" class="debug-log"></pre>
+        </section>
       </div>
-      <pre id="debug-log" class="debug-log"></pre>
-    </section>
+    </div>
   </div>
 
   <script>
@@ -85,9 +128,12 @@
     let lastDropHintSignature = '';
     let lastDragoverLogAt = 0;
     let historyPast = [];
-    let historyFuture = [];
-    let lastPersistedSignature = '';
-    let treeCollapsed = new Set();
+	    let historyFuture = [];
+	    let lastPersistedSignature = '';
+	    let treeCollapsed = new Set();
+	    let treeMaxLevel = 'n';
+	    let toolTipEl = null;
+	    let activeInlineEdit = null;
 
     document.addEventListener('DOMContentLoaded', () => {
       els = {
@@ -95,39 +141,48 @@
         status: document.getElementById('status'),
         source: document.getElementById('source'),
         tree: document.getElementById('tree'),
+        workspace: document.getElementById('workspace'),
+        bottomStack: document.getElementById('bottom-stack'),
+        infoMeta: document.getElementById('info-meta'),
+        infoMetaPill: document.getElementById('info-meta-pill'),
+        infoHover: document.getElementById('info-hover'),
+        infoSelection: document.getElementById('info-selection'),
+        infoSelectionPill: document.getElementById('info-selection-pill'),
+        infoDetails: document.getElementById('info-details'),
         sourceViewBtn: document.getElementById('source-view-btn'),
-        importBtn: document.getElementById('import-btn'),
-        saveStateBtn: document.getElementById('save-state-btn'),
-        syncNavBtn: document.getElementById('sync-nav-btn'),
-        syncFilesBtn: document.getElementById('sync-files-btn'),
-        newFolderBtn: document.getElementById('new-folder-btn'),
-        newPageBtn: document.getElementById('new-page-btn'),
-        renameBtn: document.getElementById('rename-btn'),
-        deleteBtn: document.getElementById('delete-btn'),
-        undoBtn: document.getElementById('undo-btn'),
-        redoBtn: document.getElementById('redo-btn'),
-        reloadBtn: document.getElementById('reload-btn'),
-        debugToggle: document.getElementById('debug-toggle'),
+	        newFolderBtn: document.getElementById('new-folder-btn'),
+	        newPageBtn: document.getElementById('new-page-btn'),
+	        deleteBtn: document.getElementById('delete-btn'),
+        toolUndoBtn: document.getElementById('tool-undo'),
+        toolRedoBtn: document.getElementById('tool-redo'),
+        toolReloadBtn: document.getElementById('tool-reload'),
+        toolImportBtn: document.getElementById('tool-import'),
+        toolSaveBtn: document.getElementById('tool-save'),
+        toolSyncNavBtn: document.getElementById('tool-sync-nav'),
+        toolSyncFilesBtn: document.getElementById('tool-sync-files'),
+        toolDebugBtn: document.getElementById('tool-debug'),
         debugPanel: document.getElementById('debug-panel'),
         debugLog: document.getElementById('debug-log'),
         debugClear: document.getElementById('debug-clear'),
         debugCopy: document.getElementById('debug-copy'),
+        splitMainLeft: document.getElementById('split-main-left'),
+        splitBottom: document.getElementById('split-bottom'),
+        splitInfoDebug: document.getElementById('split-info-debug'),
       };
 
-      els.importBtn.addEventListener('click', importFromMkdocs);
-      els.saveStateBtn.addEventListener('click', saveTreeOnly);
-      els.syncNavBtn.addEventListener('click', () => sync('nav_only'));
-      els.syncFilesBtn.addEventListener('click', () => sync('sync_files'));
+      els.toolImportBtn.addEventListener('click', importFromMkdocs);
+      els.toolSaveBtn.addEventListener('click', saveTreeOnly);
+      els.toolSyncNavBtn.addEventListener('click', () => sync('nav_only'));
+      els.toolSyncFilesBtn.addEventListener('click', () => sync('sync_files'));
 
       els.newFolderBtn.addEventListener('click', () => createNode('folder'));
       els.newPageBtn.addEventListener('click', () => createNode('page'));
-      els.renameBtn.addEventListener('click', renameSelected);
-      els.deleteBtn.addEventListener('click', deleteSelected);
-      els.undoBtn.addEventListener('click', undo);
-      els.redoBtn.addEventListener('click', redo);
-      els.reloadBtn.addEventListener('click', reloadFromDisk);
+	      els.deleteBtn.addEventListener('click', deleteSelected);
+      els.toolUndoBtn.addEventListener('click', undo);
+      els.toolRedoBtn.addEventListener('click', redo);
+      els.toolReloadBtn.addEventListener('click', reloadFromDisk);
 
-      els.debugToggle.addEventListener('click', toggleDebug);
+      els.toolDebugBtn.addEventListener('click', toggleDebug);
       els.debugClear.addEventListener('click', () => {
         debugLog = [];
         renderDebug();
@@ -143,6 +198,9 @@
       els.sourceViewBtn.addEventListener('click', toggleSourceView);
       updateSourceViewButton();
       treeCollapsed = new Set(JSON.parse(localStorage.getItem('page_tree_tree_collapsed') || '[]'));
+      treeMaxLevel = localStorage.getItem('page_tree_tree_max_level') || 'n';
+      bindDepthButtons();
+      updateDepthButtons();
 
       // Unified DnD handlers on the tree container (mouse-position detector).
       els.tree.addEventListener('dragover', onTreeDragOver);
@@ -153,19 +211,95 @@
       els.tree.appendChild(dropLineEl);
       hideDropLine();
 
-      debugEnabled = localStorage.getItem('page_tree_debug') === '1';
+      // Default: hidden each session.
+      debugEnabled = false;
+      debugLog = [];
+      if (els.debugPanel) els.debugPanel.hidden = true;
       updateDebugVisibility();
+
+      initSplitters();
+      bindToolHoverHints();
 
       loadMeta();
       loadState();
       loadSource();
     });
 
+	    function bindToolHoverHints() {
+	      toolTipEl = document.getElementById('tool-tooltip');
+	      const buttons = document.querySelectorAll('[data-help]');
+	      buttons.forEach(btn => {
+	        btn.addEventListener('mouseenter', (e) => {
+	          const text = btn.dataset.help || '';
+	          setInfoHover(text);
+	          showToolTip(text, e);
+	        });
+	        btn.addEventListener('mousemove', (e) => {
+	          moveToolTip(e);
+	        });
+	        btn.addEventListener('mouseleave', () => {
+	          setInfoHover('');
+	          hideToolTip();
+	        });
+	      });
+	    }
+
+	    function showToolTip(text, e) {
+	      if (!toolTipEl) return;
+	      const value = (text || '').trim();
+	      if (!value) return;
+	      toolTipEl.textContent = value;
+	      toolTipEl.hidden = false;
+	      moveToolTip(e);
+	    }
+
+	    function moveToolTip(e) {
+	      if (!toolTipEl || toolTipEl.hidden) return;
+	      const pad = 12;
+	      const maxLeft = window.innerWidth - toolTipEl.offsetWidth - pad;
+	      const maxTop = window.innerHeight - toolTipEl.offsetHeight - pad;
+	      const left = Math.min(e.clientX + pad, Math.max(pad, maxLeft));
+	      const top = Math.min(e.clientY + pad, Math.max(pad, maxTop));
+	      toolTipEl.style.left = `${left}px`;
+	      toolTipEl.style.top = `${top}px`;
+	    }
+
+	    function hideToolTip() {
+	      if (!toolTipEl) return;
+	      toolTipEl.hidden = true;
+	      toolTipEl.textContent = '';
+	    }
+
     function toggleSourceView() {
       sourceView = sourceView === 'ascii' ? 'list' : 'ascii';
       localStorage.setItem('page_tree_source_view', sourceView);
       updateSourceViewButton();
       renderSource();
+    }
+
+    function bindDepthButtons() {
+      const buttons = document.querySelectorAll('.depth-btn');
+      buttons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          treeMaxLevel = btn.dataset.depth || 'n';
+          localStorage.setItem('page_tree_tree_max_level', treeMaxLevel);
+          updateDepthButtons();
+          renderTree();
+        });
+      });
+    }
+
+    function updateDepthButtons() {
+      const buttons = document.querySelectorAll('.depth-btn');
+      buttons.forEach(btn => {
+        btn.classList.toggle('active', (btn.dataset.depth || '') === String(treeMaxLevel));
+      });
+    }
+
+    function maxLevelValue() {
+      if (treeMaxLevel === 'n') return Number.POSITIVE_INFINITY;
+      const n = parseInt(String(treeMaxLevel), 10);
+      return Number.isFinite(n) && n > 0 ? n : Number.POSITIVE_INFINITY;
     }
 
     function updateSourceViewButton() {
@@ -192,8 +326,8 @@
     }
 
     function updateHistoryButtons() {
-      if (els.undoBtn) els.undoBtn.disabled = historyPast.length === 0;
-      if (els.redoBtn) els.redoBtn.disabled = historyFuture.length === 0;
+      if (els.toolUndoBtn) els.toolUndoBtn.disabled = historyPast.length === 0;
+      if (els.toolRedoBtn) els.toolRedoBtn.disabled = historyFuture.length === 0;
     }
 
     function resetHistory() {
@@ -262,7 +396,6 @@
 
     function toggleDebug() {
       debugEnabled = !debugEnabled;
-      localStorage.setItem('page_tree_debug', debugEnabled ? '1' : '0');
       updateDebugVisibility();
       pushDebug('debug.toggle', { enabled: debugEnabled });
     }
@@ -270,7 +403,9 @@
     function updateDebugVisibility() {
       if (!els.debugPanel) return;
       els.debugPanel.hidden = !debugEnabled;
-      if (els.debugToggle) els.debugToggle.classList.toggle('active', debugEnabled);
+      if (els.splitInfoDebug) els.splitInfoDebug.style.display = debugEnabled ? '' : 'none';
+      if (els.bottomStack) els.bottomStack.classList.toggle('debug-hidden', !debugEnabled);
+      if (els.toolDebugBtn) els.toolDebugBtn.classList.toggle('active', debugEnabled);
       renderDebug();
     }
 
@@ -314,6 +449,90 @@
       }
     }
 
+	    function initSplitters() {
+	      if (!els.workspace) return;
+
+      const defaults = {
+        left: 360,
+        bottom: 180,
+        debug: 180,
+      };
+
+      const readNum = (key, fallback) => {
+        const raw = localStorage.getItem(key);
+        const n = raw ? parseFloat(raw) : NaN;
+        return Number.isFinite(n) ? n : fallback;
+      };
+
+      const clampNum = (v, min, max) => Math.min(Math.max(v, min), max);
+      const left = clampNum(readNum('page_tree_layout_left', defaults.left), 240, 820);
+      const bottom = clampNum(readNum('page_tree_layout_bottom', defaults.bottom), 120, 360);
+      const debugHeight = clampNum(readNum('page_tree_layout_debug', defaults.debug), 120, 360);
+
+      els.workspace.style.setProperty('--left-width', `${left}px`);
+      els.workspace.style.setProperty('--bottom-height', `${bottom}px`);
+      els.workspace.style.setProperty('--debug-height', `${debugHeight}px`);
+
+	      const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
+	      let drag = null;
+
+	      const onMove = (e) => {
+	        if (!drag) return;
+	        const x = e.clientX;
+	        const y = e.clientY;
+
+	        if (drag.kind === 'left') {
+	          const width = clamp(x - drag.rect.left, 240, drag.max);
+	          els.workspace.style.setProperty('--left-width', `${width}px`);
+	          return;
+	        }
+	        if (drag.kind === 'bottom') {
+	          const height = clamp(drag.bottom - y, 120, drag.max);
+	          els.workspace.style.setProperty('--bottom-height', `${height}px`);
+	          return;
+	        }
+	        if (drag.kind === 'debug') {
+	          const height = clamp(drag.bottom - y, 120, drag.max);
+	          els.workspace.style.setProperty('--debug-height', `${height}px`);
+	        }
+	      };
+
+      const onUp = () => {
+        if (!drag) return;
+        const style = getComputedStyle(els.workspace);
+        localStorage.setItem('page_tree_layout_left', parseFloat(style.getPropertyValue('--left-width')) || defaults.left);
+        localStorage.setItem('page_tree_layout_bottom', parseFloat(style.getPropertyValue('--bottom-height')) || defaults.bottom);
+        localStorage.setItem('page_tree_layout_debug', parseFloat(style.getPropertyValue('--debug-height')) || defaults.debug);
+        drag = null;
+        document.body.classList.remove('is-resizing');
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', onUp);
+      };
+
+	      const start = (kind) => (e) => {
+	        e.preventDefault();
+	        if (kind === 'left') {
+	          const rect = els.workspace.querySelector('.main-grid').getBoundingClientRect();
+	          drag = { kind, rect, max: Math.max(240, rect.width - 520) };
+	        } else if (kind === 'bottom') {
+	          const rect = els.workspace.getBoundingClientRect();
+	          drag = { kind, bottom: rect.bottom, max: Math.max(120, rect.height - 320) };
+	        } else if (kind === 'debug') {
+	          const rect = els.bottomStack.getBoundingClientRect();
+	          drag = { kind, bottom: rect.bottom, max: Math.max(120, rect.height - 120) };
+	        } else {
+	          drag = { kind };
+	        }
+	        document.body.classList.add('is-resizing');
+	        window.addEventListener('pointermove', onMove);
+	        window.addEventListener('pointerup', onUp);
+	      };
+
+      if (els.splitMainLeft) els.splitMainLeft.addEventListener('pointerdown', start('left'));
+      if (els.splitBottom) els.splitBottom.addEventListener('pointerdown', start('bottom'));
+      if (els.splitInfoDebug) els.splitInfoDebug.addEventListener('pointerdown', start('debug'));
+    }
+
     async function fetchJson(url, options) {
       const response = await fetch(url, options);
       const text = await response.text();
@@ -329,6 +548,46 @@
     function setStatus(message, type) {
       els.status.textContent = message || '';
       els.status.dataset.type = type || 'info';
+    }
+
+    function setInfoMeta(text) {
+      const value = (text || '').trim();
+      if (els.infoMeta) els.infoMeta.textContent = value;
+      if (els.infoMetaPill) {
+        els.infoMetaPill.textContent = shortenPathLine(value);
+        els.infoMetaPill.title = value;
+      }
+    }
+
+    function setInfoSelection(text) {
+      const value = (text || '').trim();
+      if (els.infoSelection) els.infoSelection.textContent = value;
+      if (els.infoSelectionPill) {
+        const short = value.replace(/^Selection:\\s*/i, '') || 'Selection: (none)';
+        els.infoSelectionPill.textContent = short;
+        els.infoSelectionPill.title = value;
+      }
+    }
+
+    function setInfoHover(text) {
+      if (!els.infoHover) return;
+      const value = (text || '').trim();
+      if (!value) {
+        els.infoHover.hidden = true;
+        els.infoHover.textContent = '';
+        return;
+      }
+      els.infoHover.hidden = false;
+      els.infoHover.textContent = value;
+    }
+
+    function shortenPathLine(line) {
+      if (!line) return '';
+      const parts = line.split('|').map(s => s.trim()).filter(Boolean);
+      if (parts.length < 2) return line;
+      const mk = parts[0].replace(/\\\\/g, '/').split('/').pop() || parts[0];
+      const docs = parts[1].replace(/\\\\/g, '/').split('/').pop() || parts[1];
+      return `${mk} • ${docs}`;
     }
 
     function findNode(nodes, id, parent = null) {
@@ -348,14 +607,18 @@
       if (!found) selectedId = '';
     }
 
-    async function loadMeta() {
-      try {
-        const data = await fetchJson('/api/meta');
-        els.meta.textContent = `${data.mkdocs_path} | ${data.docs_root}`;
-      } catch (e) {
-        els.meta.textContent = '(meta unavailable)';
-      }
-    }
+	    async function loadMeta() {
+	      try {
+	        const data = await fetchJson('/api/meta');
+	        const text = `${data.mkdocs_path} | ${data.docs_root}`;
+	        els.meta.textContent = shortenPathLine(text);
+	        els.meta.title = text;
+	        setInfoMeta(text);
+	      } catch (e) {
+	        els.meta.textContent = '(meta unavailable)';
+	        setInfoMeta('(meta unavailable)');
+	      }
+	    }
 
     async function loadState(options) {
       const reset = options && options.reset;
@@ -402,20 +665,20 @@
       }
     }
 
-    async function saveTreeOnly() {
-      setStatus('Saving tree...', 'info');
-      try {
-        await fetchJson('/api/state', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tree: stateTree })
-        });
-        lastPersistedSignature = treeSignature(stateTree);
-        setStatus('Tree saved.', 'success');
-      } catch (e) {
-        setStatus(e.message || 'Save failed.', 'error');
-      }
-    }
+	    async function saveTreeOnly() {
+	      setStatus('Saving tree...', 'info');
+	      try {
+	        await fetchJson('/api/state', {
+	          method: 'POST',
+	          headers: { 'Content-Type': 'application/json' },
+	          body: JSON.stringify({ tree: stateTree })
+	        });
+	        lastPersistedSignature = treeSignature(stateTree);
+	        setStatus('Draft saved.', 'success');
+	      } catch (e) {
+	        setStatus(e.message || 'Save failed.', 'error');
+	      }
+	    }
 
     async function sync(mode) {
       const msg = mode === 'sync_files'
@@ -597,6 +860,7 @@
       els.tree.appendChild(list);
       els.tree.appendChild(dropLineEl);
       hideDropLine();
+      updateSelectionInfo();
       if (!stateTree.length) {
         const hint = document.createElement('div');
         hint.className = 'empty-hint';
@@ -604,6 +868,33 @@
         els.tree.appendChild(hint);
       }
     }
+
+	    function updateSelectionInfo() {
+	      if (!selectedId) {
+	        setInfoSelection('Selection: (none)');
+	        return;
+	      }
+      const found = findNode(stateTree, selectedId);
+      if (!found) {
+        setInfoSelection('Selection: (none)');
+        return;
+      }
+      const kind = found.node.type === 'folder' ? 'section' : 'page';
+      const file = found.node.file ? ` | file: ./${found.node.file}` : '';
+      const segment = found.node.segment ? ` | dir: ${found.node.segment}` : '';
+	      setInfoSelection(`Selection: ${kind} | ${found.node.title}${segment}${file}`);
+	    }
+
+	    function selectNode(id) {
+	      selectedId = id || '';
+	      const prev = document.querySelector('#tree li.node.selected');
+	      if (prev) prev.classList.remove('selected');
+	      if (selectedId) {
+	        const next = document.querySelector(`#tree li.node[data-id="${CSS.escape(selectedId)}"]`);
+	        if (next) next.classList.add('selected');
+	      }
+	      updateSelectionInfo();
+	    }
 
     function persistTreeCollapsed() {
       localStorage.setItem('page_tree_tree_collapsed', JSON.stringify(Array.from(treeCollapsed)));
@@ -627,7 +918,7 @@
       return title;
     }
 
-    function buildTreeList(nodes, isRoot = false, depth = 0) {
+	    function buildTreeList(nodes, isRoot = false, depth = 0) {
       const ul = document.createElement('ul');
       ul.className = isRoot ? 'tree-root tree-explorer' : 'tree-children tree-explorer';
       for (const node of (nodes || [])) {
@@ -642,23 +933,29 @@
 
         if (li.dataset.id === selectedId) li.classList.add('selected');
 
-        const row = document.createElement('div');
-        row.className = 'row tree-row ' + (node.type === 'folder' ? 'kind-dir' : 'kind-file');
-        row.style.paddingLeft = `${10 + depth * 14}px`;
-        row.addEventListener('click', (e) => {
-          e.stopPropagation();
-          selectedId = li.dataset.id;
-          renderTree();
-        });
+	        const row = document.createElement('div');
+	        row.className = 'row tree-row ' + (node.type === 'folder' ? 'kind-dir' : 'kind-file');
+	        row.style.paddingLeft = `${10 + depth * 14}px`;
+	        row.addEventListener('click', (e) => {
+	          e.stopPropagation();
+	          selectNode(li.dataset.id);
+	        });
 
         const twist = document.createElement('span');
         twist.className = 'tree-twist';
         const isFolder = node.type === 'folder';
         const collapsed = isFolder && treeCollapsed.has(li.dataset.id);
+        const allowedByDepth = (depth + 2) <= maxLevelValue();
+        const canExpand = isFolder && allowedByDepth;
         twist.textContent = isFolder ? (collapsed ? '▸' : '▾') : '';
         twist.addEventListener('click', (e) => {
           e.stopPropagation();
-          if (isFolder) toggleTreeDir(li.dataset.id);
+          if (!isFolder) return;
+          if (!canExpand) {
+            setStatus(`Depth limited to ${treeMaxLevel === 'n' ? '∞' : treeMaxLevel} levels.`, 'info');
+            return;
+          }
+          toggleTreeDir(li.dataset.id);
         });
         row.appendChild(twist);
 
@@ -667,24 +964,38 @@
         icon.textContent = isFolder ? '📚' : '📝';
         row.appendChild(icon);
 
-        const title = document.createElement('span');
-        title.className = 'node-title';
-        title.textContent = displayTitleForNode(node);
-        if (isFolder) {
-          title.addEventListener('dblclick', (e) => {
-            e.stopPropagation();
-            toggleTreeDir(li.dataset.id);
-          });
-        }
-        row.appendChild(title);
+	        const title = document.createElement('span');
+	        title.className = 'node-title';
+	        title.textContent = displayTitleForNode(node);
+	        title.addEventListener('dblclick', (e) => {
+	          e.stopPropagation();
+	          selectedId = li.dataset.id;
+	          beginInlineEdit(li.dataset.id, 'title', title);
+	        });
+	        row.appendChild(title);
 
-        const meta = document.createElement('span');
-        meta.className = 'node-meta';
-        if (node.type === 'folder') meta.textContent = node.segment ? `${node.segment}` : '';
-        else meta.textContent = node.file ? `./${node.file}` : '';
-        row.appendChild(meta);
+	        // Pages show file location; folders don't need to show "path/meta".
+	        const meta = document.createElement('span');
+	        meta.className = 'node-meta';
+	        if (isFolder) {
+	          meta.textContent = node.segment ? `${node.segment}` : '';
+	          meta.addEventListener('dblclick', (e) => {
+	            e.stopPropagation();
+	            selectedId = li.dataset.id;
+	            beginInlineEdit(li.dataset.id, 'segment', meta);
+	          });
+	          row.appendChild(meta);
+	        } else {
+	          meta.textContent = node.file ? `./${node.file}` : '';
+	          meta.addEventListener('dblclick', (e) => {
+	            e.stopPropagation();
+	            selectedId = li.dataset.id;
+	            beginInlineEdit(li.dataset.id, 'file', meta);
+	          });
+	          row.appendChild(meta);
+	        }
 
-        li.appendChild(row);
+	        li.appendChild(row);
 
         li.addEventListener('dragstart', onDragStart);
         li.addEventListener('dragend', onDragEnd);
@@ -692,7 +1003,7 @@
         if (node.type === 'folder') {
           const children = Array.isArray(node.children) ? node.children : [];
           const collapsed = treeCollapsed.has(li.dataset.id);
-          if (!collapsed) {
+          if (!collapsed && canExpand) {
             li.appendChild(buildTreeList(children, false, depth + 1));
           } else {
             // Keep an empty children container so folder still shows as a folder
@@ -707,15 +1018,23 @@
       return ul;
     }
 
-    function onDragStart(e) {
-      // dragstart bubbles: prevent parent <li> handlers from overwriting draggedId
-      e.stopPropagation();
-      draggedId = e.currentTarget.dataset.id || '';
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', draggedId);
-      e.currentTarget.classList.add('dragging');
-      pushDebug('drag.start', { draggedId, type: e.currentTarget.dataset.type || '', title: e.currentTarget.dataset.title || '' });
-    }
+	    function onDragStart(e) {
+	      // dragstart bubbles: prevent parent <li> handlers from overwriting draggedId
+	      e.stopPropagation();
+	      if (activeInlineEdit) {
+	        e.preventDefault();
+	        return;
+	      }
+	      if (e.currentTarget && e.currentTarget.classList && e.currentTarget.classList.contains('is-editing')) {
+	        e.preventDefault();
+	        return;
+	      }
+	      draggedId = e.currentTarget.dataset.id || '';
+	      e.dataTransfer.effectAllowed = 'move';
+	      e.dataTransfer.setData('text/plain', draggedId);
+	      e.currentTarget.classList.add('dragging');
+	      pushDebug('drag.start', { draggedId, type: e.currentTarget.dataset.type || '', title: e.currentTarget.dataset.title || '' });
+	    }
 
     function onDragEnd(e) {
       // dragend bubbles too; keep state consistent
@@ -1032,19 +1351,160 @@
       setStatus('Created (remember to Sync to create/move files).', 'info');
     }
 
-    function renameSelected() {
-      if (!selectedId) return setStatus('Select a node first.', 'info');
-      const info = findNode(stateTree, selectedId);
-      if (!info) return;
-      const next = prompt('New title:', info.node.title || '');
-      if (!next || !next.trim()) return;
-      withHistory('rename', () => {
-        info.node.title = next.trim();
-      });
-      renderTree();
-      updateHistoryButtons();
-      setStatus('Renamed.', 'success');
-    }
+	    function renameSelected() {
+	      if (!selectedId) return setStatus('Select a node first.', 'info');
+	      const rowTitle = document.querySelector(`#tree li[data-id="${selectedId}"] .node-title`);
+	      if (!rowTitle) return setStatus('Selected node not visible (expand parent folders).', 'info');
+	      beginInlineEdit(selectedId, 'title', rowTitle);
+	    }
+
+	    function beginInlineEdit(id, field, hostEl) {
+	      if (!id || !hostEl) return;
+	      const info = findNode(stateTree, id);
+	      if (!info) return setStatus('Node not found.', 'error');
+
+	      if (activeInlineEdit && activeInlineEdit.id === id && activeInlineEdit.field === field) return;
+	      if (activeInlineEdit) cancelInlineEdit();
+
+	      const li = hostEl.closest('li.node');
+	      if (!li) return;
+
+	      const originalValue =
+	        field === 'file' ? (info.node.file || '') :
+	        field === 'segment' ? (info.node.segment || '') :
+	        (info.node.title || '');
+	      const originalDir = (() => {
+	        if (field !== 'file') return '';
+	        const p = String(originalValue || '').replace(/^\.\//, '');
+	        const idx = p.lastIndexOf('/');
+	        return idx >= 0 ? p.slice(0, idx + 1) : '';
+	      })();
+	      const startValue =
+	        field === 'file' ? (() => {
+	          const p = String(originalValue || '').replace(/^\.\//, '');
+	          const idx = p.lastIndexOf('/');
+	          return idx >= 0 ? p.slice(idx + 1) : p;
+	        })() :
+	        field === 'segment' ? originalValue :
+	        displayTitleForNode(info.node);
+
+	      const input = document.createElement('input');
+	      input.type = 'text';
+	      input.className = 'inline-edit';
+	      input.value = startValue;
+	      input.spellcheck = false;
+	      input.draggable = false;
+
+	      const prevText = hostEl.textContent || '';
+	      hostEl.textContent = '';
+	      hostEl.appendChild(input);
+
+	      const prevDraggable = li.draggable;
+	      li.draggable = false;
+	      li.classList.add('is-editing');
+
+	      activeInlineEdit = { id, field, hostEl, input, prevText, prevDraggable, originalValue, originalDir };
+
+	      const finish = (mode) => {
+	        if (!activeInlineEdit) return;
+	        const current = activeInlineEdit;
+	        if (current.input) current.input.removeEventListener('keydown', onKeyDown);
+	        if (current.input) current.input.removeEventListener('blur', onBlur);
+	        li.draggable = current.prevDraggable;
+	        li.classList.remove('is-editing');
+	        const value = (current.input && current.input.value ? current.input.value : '').trim();
+	        activeInlineEdit = null;
+
+	        if (mode === 'cancel') {
+	          current.hostEl.textContent = current.prevText;
+	          return;
+	        }
+
+	        if (current.field === 'title') {
+	          if (!value) {
+	            current.hostEl.textContent = current.prevText;
+	            return;
+	          }
+	          withHistory('edit.title', () => {
+	            const nodeInfo = findNode(stateTree, current.id);
+	            if (nodeInfo) nodeInfo.node.title = value;
+	          });
+	          renderTree();
+	          updateHistoryButtons();
+	          setStatus('Renamed.', 'success');
+	          return;
+	        }
+
+	        if (current.field === 'segment') {
+	          if (value.includes('/') || value.includes('\\')) {
+	            setStatus('Folder name cannot contain slashes.', 'error');
+	            current.hostEl.textContent = current.prevText;
+	            return;
+	          }
+	          withHistory('edit.segment', () => {
+	            const nodeInfo = findNode(stateTree, current.id);
+	            if (!nodeInfo) return;
+	            nodeInfo.node.segment = value;
+	          });
+	          renderTree();
+	          updateHistoryButtons();
+	          setStatus('Updated folder name.', 'success');
+	          return;
+	        }
+
+	        if (current.field === 'file') {
+	          if (value.includes('/') || value.includes('\\')) {
+	            setStatus('Filename only (no directories).', 'error');
+	            current.hostEl.textContent = current.prevText;
+	            return;
+	          }
+	          withHistory('edit.file', () => {
+	            const nodeInfo = findNode(stateTree, current.id);
+	            if (!nodeInfo) return;
+	            const before = (current.originalValue || '').trim();
+	            if (before && !nodeInfo.node.file_prev) nodeInfo.node.file_prev = before;
+	            const base = value ? value.replace(/^\.\//, '') : '';
+	            nodeInfo.node.file = base ? `${current.originalDir}${base}` : null;
+	          });
+	          renderTree();
+	          updateHistoryButtons();
+	          setStatus('Updated file path.', 'success');
+	          return;
+	        }
+	      };
+
+	      const onKeyDown = (e) => {
+	        if (e.key === 'Enter') {
+	          e.preventDefault();
+	          finish('commit');
+	        } else if (e.key === 'Escape') {
+	          e.preventDefault();
+	          finish('cancel');
+	        }
+	      };
+	      const onBlur = () => finish('commit');
+
+	      input.addEventListener('keydown', onKeyDown);
+	      input.addEventListener('blur', onBlur);
+
+	      requestAnimationFrame(() => {
+	        input.focus();
+	        input.select();
+	      });
+	    }
+
+	    function cancelInlineEdit() {
+	      if (!activeInlineEdit) return;
+	      const current = activeInlineEdit;
+	      const li = current.hostEl.closest('li.node');
+	      if (current.input) current.input.remove();
+	      if (li) {
+	        li.draggable = current.prevDraggable;
+	        li.classList.remove('is-editing');
+	      }
+	      current.hostEl.textContent = current.prevText;
+	      activeInlineEdit = null;
+	    }
 
     function deleteSelected() {
       if (!selectedId) return setStatus('Select a node first.', 'info');

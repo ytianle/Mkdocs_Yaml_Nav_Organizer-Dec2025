@@ -156,6 +156,7 @@ class Node:
     title: str
     segment: str | None = None  # for folder, stable physical dir name
     file: str | None = None  # for page, relative path under DOCS_ROOT
+    file_prev: str | None = None  # for page, previous relative path (rename support)
     children: list["Node"] | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -165,6 +166,7 @@ class Node:
             "title": self.title,
             "segment": self.segment,
             "file": self.file,
+            "file_prev": self.file_prev,
             "children": [c.to_dict() for c in (self.children or [])],
         }
 
@@ -179,10 +181,13 @@ def _node_from_dict(data: dict[str, Any]) -> Node:
     node_id = str(data.get("id") or "").strip() or _new_id()
     segment = data.get("segment")
     file = data.get("file")
+    file_prev = data.get("file_prev")
     if segment not in (None, "") and not isinstance(segment, str):
         raise ValueError("Invalid segment.")
     if file not in (None, "") and not isinstance(file, str):
         raise ValueError("Invalid file.")
+    if file_prev not in (None, "") and not isinstance(file_prev, str):
+        raise ValueError("Invalid file_prev.")
 
     children_raw = data.get("children") or []
     if children_raw and not isinstance(children_raw, list):
@@ -196,9 +201,12 @@ def _node_from_dict(data: dict[str, Any]) -> Node:
     file_str = str(file).strip() if isinstance(file, str) and file.strip() else None
     if file_str:
         file_str = _safe_rel_path(file_str)
+    prev_str = str(file_prev).strip() if isinstance(file_prev, str) and file_prev.strip() else None
+    if prev_str:
+        prev_str = _safe_rel_path(prev_str)
     if children:
         raise ValueError("Page node cannot have children.")
-    return Node(id=node_id, type="page", title=title, segment=None, file=file_str, children=[])
+    return Node(id=node_id, type="page", title=title, segment=None, file=file_str, file_prev=prev_str, children=[])
 
 
 def _flatten_pages(nodes: Iterable[Node]) -> list[Node]:
@@ -417,7 +425,8 @@ def _plan_file_sync(
             basename = Path(node.file).name if node.file else f"{_slugify(node.title)}.md"
             desired_rel = f"{folder_dir}/{basename}" if folder_dir else basename
             desired_rel = _safe_rel_path(desired_rel)
-            current_rel = _safe_rel_path(node.file) if node.file else desired_rel
+            # If a user renamed a file in the editor, prefer the previous path as the source for moving.
+            current_rel = _safe_rel_path(node.file_prev) if node.file_prev else (_safe_rel_path(node.file) if node.file else desired_rel)
             src = DOCS_ROOT / current_rel
             dst = DOCS_ROOT / desired_rel
             if not src.exists():
@@ -425,6 +434,7 @@ def _plan_file_sync(
                 if create_missing:
                     _create_missing_page(desired_rel, node.title)
                     node.file = desired_rel
+                    node.file_prev = None
                 continue
 
             if src != dst:
@@ -435,6 +445,7 @@ def _plan_file_sync(
                 if src_assets.exists() and src_assets.is_dir():
                     asset_moves.append((src_assets, dst_assets))
             node.file = desired_rel
+            node.file_prev = None
 
     walk(nodes, [])
     _ensure_unique_targets(page_moves + asset_moves)
