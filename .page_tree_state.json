@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "updated_at": "2025-12-12T22:32:03",
+  "tree": [
+    {
+      "id": "323fa24c9b83416592c0d9809da44138",
+      "type": "folder",
+      "title": "Guide",
+      "segment": "guide",
+      "file": null,
+      "children": [
+        {
+          "id": "554f283a74d54c62b0efd69f6bfdc51f",
+          "type": "page",
+          "title": "guide/intro.md",
+          "segment": null,
+          "file": "guide/intro.md",
+          "children": []
+        },
+        {
+          "id": "b55f4d3398294b5eb16c506dea4dbb92",
+          "type": "folder",
+          "title": "Index",
+          "segment": "index",
+          "file": null,
+          "children": [
+            {
+              "id": "4060b8bae313470bbd4767fa9c7359da",
+              "type": "page",
+              "title": "guide/index/index.md",
+              "segment": null,
+              "file": "guide/index/index.md",
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "27da919b867048cb871afc3848949380",
+          "type": "page",
+          "title": "guide/setup.md",
+          "segment": null,
+          "file": "guide/setup.md",
+          "children": []
+        },
+        {
+          "id": "6f429962868c4cefbb4f2185139a26e8",
+          "type": "folder",
+          "title": "xx",
+          "segment": "xx",
+          "file": null,
+          "children": [
+            {
+              "id": "f2b1a5468a754bf1b1ad078e6b3387fb",
+              "type": "page",
+              "title": "tt",
+              "segment": null,
+              "file": "guide/xx/tt.md",
+              "children": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "38c677daa07b41649ba17ea158ee7770",
+      "type": "page",
+      "title": "xx.md",
+      "segment": null,
+      "file": "xx.md.md",
+      "children": []
+    }
+  ]
+}

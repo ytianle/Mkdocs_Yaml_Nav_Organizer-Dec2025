@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import os
-from collections import Counter
 from datetime import datetime
 from itertools import count
 from pathlib import Path
@@ -125,9 +124,10 @@ def _backup_file(path: Path) -> Path | None:
     return backup_path
 
 
-def _load_mkdocs() -> CommentedMap:
-    storage = NavStorage(MKDOCS_PATH)
-    return storage.load()
+def _json_error(message: str, status: int = 400, **extra: Any):
+    payload: dict[str, Any] = {"error": message}
+    payload.update(extra)
+    return jsonify(payload), status
 
 
 def _nav_to_tree(nav_items: Iterable[Any], id_counter: Iterator[int]) -> list[dict[str, Any]]:
@@ -245,32 +245,6 @@ def _validate_paths_exist(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return missing
 
 
-def _derive_folder_segment(node: dict[str, Any], parent_base: str) -> str | None:
-    """Try to infer the folder name from existing child paths."""
-    candidates: list[str] = []
-
-    def _collect(items: list[dict[str, Any]]):
-        for child in items:
-            path = child.get("path")
-            if path:
-                normalized = _normalize_rel_path(path)
-                remainder = normalized
-                if parent_base:
-                    prefix = f"{parent_base}/"
-                    if normalized.startswith(prefix):
-                        remainder = normalized[len(prefix):]
-                parts = remainder.split("/")
-                if parts and parts[0]:
-                    candidates.append(parts[0])
-            _collect(child.get("children") or [])
-
-    _collect(node.get("children") or [])
-    if not candidates:
-        return None
-    counter = Counter(candidates)
-    return counter.most_common(1)[0][0]
-
-
 def _rebase_tree(nodes: list[dict[str, Any]], parent_base: str = "") -> tuple[list[dict[str, Any]], list[tuple[str, str]]]:
     """Rebuild a nav tree so that file paths follow the logical folder structure.
 
@@ -290,7 +264,7 @@ def _rebase_tree(nodes: list[dict[str, Any]], parent_base: str = "") -> tuple[li
         node_id = node.get("id")
 
         if children:
-            segment = _derive_folder_segment(node, parent_base) or _slugify_segment(title)
+            segment = _slugify_segment(title)
             folder_base = _join(parent_base, segment)
             rebased_children, child_moves = _rebase_tree(children, folder_base)
             rebased.append({
@@ -447,9 +421,9 @@ def index() -> str:
 @app.route("/nav", methods=["GET"])
 def get_nav():
     try:
-        data = _load_mkdocs()
+        data = NavStorage(MKDOCS_PATH).load()
     except (ValueError, TypeError) as exc:
-        return jsonify({"error": str(exc)}), 500
+        return _json_error(str(exc), 500)
     nav_items = data.get("nav", CommentedSeq())
     counter = count(1)
     tree = _nav_to_tree(nav_items, counter)
@@ -465,34 +439,35 @@ def get_nav():
 def update_nav():
     payload = request.get_json(silent=True)
     if not isinstance(payload, list):
-        return jsonify({"error": "Expected a JSON list at the root."}), 400
+        return _json_error("Expected a JSON list at the root.", 400)
 
     try:
         validated_payload = _validate_tree_payload(payload)
     except ValueError as exc:
-        return jsonify({"error": f"Invalid nav payload: {exc}"}), 400
+        return _json_error(f"Invalid nav payload: {exc}", 400)
     except Exception as exc:  # pragma: no cover - defensive
-        return jsonify({"error": f"Invalid nav payload: {exc}"}), 400
+        return _json_error(f"Invalid nav payload: {exc}", 400)
 
     # Confirm the currently referenced files exist before we start moving things.
     missing_paths = _validate_paths_exist(validated_payload)
     if missing_paths:
-        return jsonify({
-            "error": "Missing markdown files.",
-            "missing": missing_paths,
-            "docs_root": str(DOCS_ROOT),
-        }), 400
+        return _json_error(
+            "Missing markdown files.",
+            400,
+            missing=missing_paths,
+            docs_root=str(DOCS_ROOT),
+        )
 
     # Rebase paths to reflect the new logical folder positions.
     try:
         rebased_tree, planned_moves = _rebase_tree(validated_payload)
     except Exception as exc:  # pragma: no cover - defensive
-        return jsonify({"error": f"Invalid nav payload: {exc}"}), 400
+        return _json_error(f"Invalid nav payload: {exc}", 400)
 
     planned_moves = [(src, dst) for src, dst in planned_moves if src != dst]
     final_paths = _collect_paths(rebased_tree)
     if len(final_paths) != len(set(final_paths)):
-        return jsonify({"error": "Duplicate target paths after reordering."}), 400
+        return _json_error("Duplicate target paths after reordering.", 400)
 
     existing_paths = set(_collect_paths(validated_payload))
     collisions: list[dict[str, str]] = []
@@ -504,26 +479,24 @@ def update_nav():
             collisions.append({"source": src, "target": dst, "reason": "target already exists on disk"})
 
     if collisions:
-        return jsonify({
-            "error": "Conflicting target paths.",
-            "collisions": collisions,
-        }), 400
+        return _json_error("Conflicting target paths.", 400, collisions=collisions)
 
     try:
         _apply_moves(planned_moves)
     except (FileNotFoundError, FileExistsError) as exc:
-        return jsonify({"error": str(exc)}), 400
+        return _json_error(str(exc), 400)
     except Exception as exc:  # pragma: no cover - defensive
-        return jsonify({"error": f"Failed to move files: {exc}"}), 500
+        return _json_error(f"Failed to move files: {exc}", 500)
 
     # After moving files, ensure the rebased nav points to valid locations.
     rebased_missing = _validate_paths_exist(rebased_tree)
     if rebased_missing:
-        return jsonify({
-            "error": "Missing markdown files after applying moves.",
-            "missing": rebased_missing,
-            "docs_root": str(DOCS_ROOT),
-        }), 500
+        return _json_error(
+            "Missing markdown files after applying moves.",
+            500,
+            missing=rebased_missing,
+            docs_root=str(DOCS_ROOT),
+        )
 
     new_nav = _tree_to_nav(rebased_tree)
 
@@ -531,7 +504,7 @@ def update_nav():
     try:
         backup_path = storage.save_nav(new_nav)
     except Exception as exc:  # pragma: no cover - defensive
-        return jsonify({"error": f"Failed to save nav: {exc}"}), 500
+        return _json_error(f"Failed to save nav: {exc}", 500)
     response = {
         "status": "ok",
         "moves_applied": len(planned_moves),

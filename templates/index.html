@@ -48,35 +48,57 @@
     let currentTree = [];
     let currentSource = [];
     let currentSearchTerm = '';
+    let els = {};
 
     const MAX_HISTORY = 40;
 
     document.addEventListener('DOMContentLoaded', () => {
-      document.getElementById('save-btn').addEventListener('click', handleSave);
-      document.getElementById('reload-btn').addEventListener('click', () => {
+      els = {
+        saveBtn: document.getElementById('save-btn'),
+        reloadBtn: document.getElementById('reload-btn'),
+        undoBtn: document.getElementById('undo-btn'),
+        searchInput: document.getElementById('search-input'),
+        navTree: document.getElementById('nav-tree'),
+        sourceExplorer: document.getElementById('source-explorer'),
+        status: document.getElementById('status'),
+      };
+
+      els.saveBtn.addEventListener('click', handleSave);
+      els.reloadBtn.addEventListener('click', () => {
         fetchNav();
         fetchSource();
       });
-      document.getElementById('undo-btn').addEventListener('click', handleUndo);
-      document.getElementById('search-input').addEventListener('input', handleSearch);
-      const navContainer = document.getElementById('nav-tree');
-      navContainer.addEventListener('dragover', handleRootDragOver);
-      navContainer.addEventListener('drop', handleRootDrop);
+      els.undoBtn.addEventListener('click', handleUndo);
+      els.searchInput.addEventListener('input', handleSearch);
+      els.navTree.addEventListener('dragover', handleRootDragOver);
+      els.navTree.addEventListener('drop', handleRootDrop);
       fetchNav();
       fetchSource();
     });
 
+    async function fetchJson(url, options) {
+      const response = await fetch(url, options);
+      const text = await response.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch (e) {
+        data = null;
+      }
+      if (!response.ok) {
+        const message = data && typeof data.error === 'string' ? data.error : 'Request failed.';
+        throw new Error(message);
+      }
+      return data;
+    }
+
     async function fetchNav() {
       setStatus('Loading navigation...', 'info');
       try {
-        const response = await fetch('/nav');
-        if (!response.ok) {
-          throw new Error('Failed to load navigation.');
-        }
-        const data = await response.json();
+        const data = await fetchJson('/nav');
         const missing = Array.isArray(data.missing) ? data.missing : [];
         const docsRoot = data.docs_root || '';
-        const tree = Array.isArray(data) ? data : (Array.isArray(data.tree) ? data.tree : []);
+        const tree = Array.isArray(data.tree) ? data.tree : [];
         historyStack = [];
         currentTree = Array.isArray(tree) ? tree : [];
         pendingHistorySnapshot = null;
@@ -86,7 +108,7 @@
           }).join('; ');
           const hasCase = missing.some(m => m.case_mismatch);
           const extra = hasCase ? ' (check filename case)' : '';
-          document.getElementById('nav-tree').textContent = `Nav has missing files: ${detail}${extra}`;
+          els.navTree.textContent = `Nav has missing files: ${detail}${extra}`;
           setStatus(`Missing: ${detail}${extra}${docsRoot ? ` @ ${docsRoot}` : ''}`, 'error');
           updateUndoButton();
           return;
@@ -96,12 +118,12 @@
         updateUndoButton();
       } catch (err) {
         setStatus(err.message || 'Unable to load navigation.', 'error');
-        document.getElementById('nav-tree').textContent = 'No navigation loaded.';
+        els.navTree.textContent = 'No navigation loaded.';
       }
     }
 
     function renderTree(tree) {
-      const container = document.getElementById('nav-tree');
+      const container = els.navTree;
       clearDropState();
       draggedItem = null;
       container.innerHTML = '';
@@ -116,7 +138,7 @@
     }
 
     function renderExplorer(tree) {
-      const container = document.getElementById('source-explorer');
+      const container = els.sourceExplorer;
       container.innerHTML = '';
       if (!Array.isArray(tree) || !tree.length) {
         container.textContent = '(no markdown files found)';
@@ -127,14 +149,10 @@
     }
 
     async function fetchSource() {
-      const container = document.getElementById('source-explorer');
+      const container = els.sourceExplorer;
       container.textContent = 'Loading...';
       try {
-        const response = await fetch('/source');
-        if (!response.ok) {
-          throw new Error('Failed to load source tree.');
-        }
-        const data = await response.json();
+        const data = await fetchJson('/source');
         currentSource = Array.isArray(data) ? data : [];
         renderExplorer(currentSource);
       } catch (err) {
@@ -475,14 +493,11 @@
     }
 
     function commitDomChanges(message) {
-      const container = document.getElementById('nav-tree');
+      const container = els.navTree;
       const rootList = container.querySelector(':scope > ul');
 
-      // 直接从当前 DOM 序列化成新的 tree
       const newTree = rootList ? serializeList(rootList) : [];
 
-      // 在 dragstart 的时候我们已经做过 deepClone 了
-      // 这里直接用 snapshot 进历史栈就行，不再做 JSON.stringify 比较 old/new
       const snapshot = pendingHistorySnapshot || deepClone(currentTree);
       if (snapshot) {
         pushHistorySnapshot(snapshot);
@@ -490,7 +505,6 @@
 
       currentTree = newTree;
 
-      // 重新渲染一次，让“文件变文件夹”等结构性的变化马上体现在 UI 上
       renderTree(currentTree);
 
       setStatus(message || 'Structure updated.', 'success');
@@ -646,36 +660,27 @@
         setStatus('Nothing to save.', 'info');
         return;
       }
+      saveNav();
+    }
+
+    async function saveNav() {
       setStatus('Saving...', 'info');
-      fetch('/nav', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(currentTree)
-      })
-        .then(response => {
-          if (!response.ok) {
-            return response.json().then(data => {
-              throw new Error(data.error || 'Save failed.');
-            }).catch(() => {
-              throw new Error('Save failed.');
-            });
-          }
-          return response.json();
-        })
-        .then(() => {
-          setStatus('Navigation saved.', 'success');
-          fetchNav();
-          fetchSource();
-        })
-        .catch(err => {
-          setStatus(err.message || 'Save failed.', 'error');
+      try {
+        await fetchJson('/nav', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(currentTree)
         });
+        setStatus('Navigation saved.', 'success');
+        fetchNav();
+        fetchSource();
+      } catch (err) {
+        setStatus(err.message || 'Save failed.', 'error');
+      }
     }
 
     function syncTreeFromDom() {
-      const container = document.getElementById('nav-tree');
+      const container = els.navTree;
       const rootList = container.querySelector(':scope > ul');
       currentTree = rootList ? serializeList(rootList) : [];
     }
@@ -715,7 +720,7 @@
     }
 
     function updateUndoButton() {
-      const undoBtn = document.getElementById('undo-btn');
+      const undoBtn = els.undoBtn;
       if (!undoBtn) {
         return;
       }
@@ -751,9 +756,8 @@
     }
 
     function setStatus(message, type) {
-      const status = document.getElementById('status');
-      status.textContent = message || '';
-      status.dataset.type = type || 'info';
+      els.status.textContent = message || '';
+      els.status.dataset.type = type || 'info';
     }
 
     function deepClone(value) {

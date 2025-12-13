@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Page Tree (MkDocs)</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+  <div class="shell">
+    <header class="toolbar">
+      <div class="title">
+        <h1>Page Tree</h1>
+        <div id="meta" class="muted">Loading...</div>
+      </div>
+      <div class="actions">
+        <div class="group">
+          <button id="undo-btn" type="button" title="Undo">↩️ Undo</button>
+          <button id="redo-btn" type="button" title="Redo">↪️ Redo</button>
+          <button id="reload-btn" type="button" title="Reload from saved state">🔄 Reload</button>
+        </div>
+        <div class="group">
+          <button id="import-btn" type="button" title="Import nav from mkdocs.yml">📥 Import</button>
+          <button id="save-state-btn" type="button" title="Save tree draft">💾 Save</button>
+          <button id="sync-nav-btn" type="button" title="Write mkdocs.yml nav (no file moves)">🧭 Sync Nav</button>
+          <button id="sync-files-btn" type="button" title="Write mkdocs.yml and move files">📦 Sync Files</button>
+          <button id="debug-toggle" type="button" class="ghost" title="Toggle debug panel">🐞 Debug</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="panes">
+      <section class="card">
+        <div class="card-head">
+          <h2>Source</h2>
+          <span class="muted">Click to locate in tree</span>
+        </div>
+        <div id="source" class="list-shell">Loading...</div>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Tree</h2>
+          <div class="inline-actions">
+            <button id="new-folder-btn" type="button">New Folder</button>
+            <button id="new-page-btn" type="button">New Page</button>
+            <button id="rename-btn" type="button">Rename</button>
+            <button id="delete-btn" type="button">Delete</button>
+          </div>
+        </div>
+        <div id="tree" class="list-shell">Loading...</div>
+      </section>
+    </main>
+
+    <footer id="status" data-type="info"></footer>
+    <section id="debug-panel" class="debug-panel" hidden>
+      <div class="debug-head">
+        <div class="debug-title">DnD Debug</div>
+        <div class="debug-actions">
+          <button id="debug-clear" type="button" class="ghost">Clear</button>
+          <button id="debug-copy" type="button" class="ghost">Copy</button>
+        </div>
+      </div>
+      <pre id="debug-log" class="debug-log"></pre>
+    </section>
+  </div>
+
+  <script>
+    let els = {};
+    let stateTree = [];
+    let sourceTree = [];
+    let selectedId = '';
+    let draggedId = '';
+    let dropHint = { mode: null, targetId: null };
+    let dropLineEl = null;
+    let debugEnabled = false;
+    let debugLog = [];
+    let lastDropHintSignature = '';
+    let lastDragoverLogAt = 0;
+    let historyPast = [];
+    let historyFuture = [];
+    let lastPersistedSignature = '';
+
+    document.addEventListener('DOMContentLoaded', () => {
+      els = {
+        meta: document.getElementById('meta'),
+        status: document.getElementById('status'),
+        source: document.getElementById('source'),
+        tree: document.getElementById('tree'),
+        importBtn: document.getElementById('import-btn'),
+        saveStateBtn: document.getElementById('save-state-btn'),
+        syncNavBtn: document.getElementById('sync-nav-btn'),
+        syncFilesBtn: document.getElementById('sync-files-btn'),
+        newFolderBtn: document.getElementById('new-folder-btn'),
+        newPageBtn: document.getElementById('new-page-btn'),
+        renameBtn: document.getElementById('rename-btn'),
+        deleteBtn: document.getElementById('delete-btn'),
+        undoBtn: document.getElementById('undo-btn'),
+        redoBtn: document.getElementById('redo-btn'),
+        reloadBtn: document.getElementById('reload-btn'),
+        debugToggle: document.getElementById('debug-toggle'),
+        debugPanel: document.getElementById('debug-panel'),
+        debugLog: document.getElementById('debug-log'),
+        debugClear: document.getElementById('debug-clear'),
+        debugCopy: document.getElementById('debug-copy'),
+      };
+
+      els.importBtn.addEventListener('click', importFromMkdocs);
+      els.saveStateBtn.addEventListener('click', saveTreeOnly);
+      els.syncNavBtn.addEventListener('click', () => sync('nav_only'));
+      els.syncFilesBtn.addEventListener('click', () => sync('sync_files'));
+
+      els.newFolderBtn.addEventListener('click', () => createNode('folder'));
+      els.newPageBtn.addEventListener('click', () => createNode('page'));
+      els.renameBtn.addEventListener('click', renameSelected);
+      els.deleteBtn.addEventListener('click', deleteSelected);
+      els.undoBtn.addEventListener('click', undo);
+      els.redoBtn.addEventListener('click', redo);
+      els.reloadBtn.addEventListener('click', reloadFromDisk);
+
+      els.debugToggle.addEventListener('click', toggleDebug);
+      els.debugClear.addEventListener('click', () => {
+        debugLog = [];
+        renderDebug();
+      });
+      els.debugCopy.addEventListener('click', () => {
+        const text = (debugLog || []).join('\n');
+        copyToClipboard(text);
+        setStatus('Debug log copied.', 'info');
+      });
+
+      // Unified DnD handlers on the tree container (mouse-position detector).
+      els.tree.addEventListener('dragover', onTreeDragOver);
+      els.tree.addEventListener('drop', onTreeDrop);
+      els.tree.addEventListener('dragleave', onTreeDragLeave);
+      dropLineEl = document.createElement('div');
+      dropLineEl.className = 'drop-line';
+      els.tree.appendChild(dropLineEl);
+      hideDropLine();
+
+      debugEnabled = localStorage.getItem('page_tree_debug') === '1';
+      updateDebugVisibility();
+
+      loadMeta();
+      loadState();
+      loadSource();
+    });
+
+    function deepClone(value) {
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function treeSignature(tree) {
+      try {
+        return JSON.stringify(tree || []);
+      } catch (e) {
+        return String(Date.now());
+      }
+    }
+
+    function isDirty() {
+      return treeSignature(stateTree) !== lastPersistedSignature;
+    }
+
+    function updateHistoryButtons() {
+      if (els.undoBtn) els.undoBtn.disabled = historyPast.length === 0;
+      if (els.redoBtn) els.redoBtn.disabled = historyFuture.length === 0;
+    }
+
+    function resetHistory() {
+      historyPast = [];
+      historyFuture = [];
+      updateHistoryButtons();
+    }
+
+    function pushHistorySnapshot(snapshot) {
+      historyPast.push(snapshot);
+      if (historyPast.length > 60) historyPast.shift();
+      historyFuture = [];
+      updateHistoryButtons();
+    }
+
+    function withHistory(label, mutator) {
+      const before = deepClone(stateTree);
+      pushHistorySnapshot(before);
+      mutator();
+      pushDebug('history.commit', { label });
+    }
+
+    function undo() {
+      if (!historyPast.length) {
+        setStatus('Nothing to undo.', 'info');
+        return;
+      }
+      const current = deepClone(stateTree);
+      const previous = historyPast.pop();
+      historyFuture.push(current);
+      stateTree = deepClone(previous);
+      ensureSelectedValid();
+      renderTree();
+      updateHistoryButtons();
+      pushDebug('history.undo', {});
+      setStatus('Undid last action.', 'success');
+    }
+
+    function redo() {
+      if (!historyFuture.length) {
+        setStatus('Nothing to redo.', 'info');
+        return;
+      }
+      const current = deepClone(stateTree);
+      const next = historyFuture.pop();
+      historyPast.push(current);
+      stateTree = deepClone(next);
+      ensureSelectedValid();
+      renderTree();
+      updateHistoryButtons();
+      pushDebug('history.redo', {});
+      setStatus('Redid last action.', 'success');
+    }
+
+    async function reloadFromDisk() {
+      if (isDirty()) {
+        const ok = confirm('You have unsaved changes in the editor. Reload anyway?');
+        if (!ok) return;
+      }
+      setStatus('Reloading...', 'info');
+      pushDebug('reload.click', {});
+      await loadState({ reset: true });
+      await loadSource();
+      setStatus('Reloaded.', 'success');
+    }
+
+    function toggleDebug() {
+      debugEnabled = !debugEnabled;
+      localStorage.setItem('page_tree_debug', debugEnabled ? '1' : '0');
+      updateDebugVisibility();
+      pushDebug('debug.toggle', { enabled: debugEnabled });
+    }
+
+    function updateDebugVisibility() {
+      if (!els.debugPanel) return;
+      els.debugPanel.hidden = !debugEnabled;
+      if (els.debugToggle) els.debugToggle.classList.toggle('active', debugEnabled);
+      renderDebug();
+    }
+
+    function renderDebug() {
+      if (!debugEnabled) return;
+      const lines = (debugLog || []).slice(-300);
+      els.debugLog.textContent = lines.join('\n');
+      // Always keep the latest line visible.
+      requestAnimationFrame(() => {
+        els.debugLog.scrollTop = els.debugLog.scrollHeight;
+      });
+    }
+
+    function pushDebug(tag, payload) {
+      if (!debugEnabled) return;
+      const ts = new Date().toISOString().slice(11, 23);
+      let detail = '';
+      try {
+        detail = payload === undefined ? '' : ' ' + JSON.stringify(payload);
+      } catch (e) {
+        detail = ' ' + String(payload);
+      }
+      debugLog.push(`[${ts}] ${tag}${detail}`);
+      if (debugLog.length > 800) debugLog = debugLog.slice(-800);
+      renderDebug();
+    }
+
+    async function copyToClipboard(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (e) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+      }
+    }
+
+    async function fetchJson(url, options) {
+      const response = await fetch(url, options);
+      const text = await response.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+      if (!response.ok) {
+        const msg = data && typeof data.error === 'string' ? data.error : 'Request failed.';
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    function setStatus(message, type) {
+      els.status.textContent = message || '';
+      els.status.dataset.type = type || 'info';
+    }
+
+    function findNode(nodes, id, parent = null) {
+      for (const node of (nodes || [])) {
+        if (node.id === id) return { node, parent, siblings: nodes };
+        if (node.type === 'folder' && Array.isArray(node.children)) {
+          const found = findNode(node.children, id, node);
+          if (found) return found;
+        }
+      }
+      return null;
+    }
+
+    function ensureSelectedValid() {
+      if (!selectedId) return;
+      const found = findNode(stateTree, selectedId);
+      if (!found) selectedId = '';
+    }
+
+    async function loadMeta() {
+      try {
+        const data = await fetchJson('/api/meta');
+        els.meta.textContent = `${data.mkdocs_path} | ${data.docs_root}`;
+      } catch (e) {
+        els.meta.textContent = '(meta unavailable)';
+      }
+    }
+
+    async function loadState(options) {
+      const reset = options && options.reset;
+      setStatus('Loading tree...', 'info');
+      try {
+        const data = await fetchJson('/api/state');
+        stateTree = Array.isArray(data.tree) ? data.tree : [];
+        lastPersistedSignature = treeSignature(stateTree);
+        if (reset) resetHistory();
+        ensureSelectedValid();
+        renderTree();
+        updateHistoryButtons();
+        setStatus('Tree loaded.', 'success');
+      } catch (e) {
+        els.tree.textContent = 'Failed to load tree.';
+        setStatus(e.message || 'Failed to load tree.', 'error');
+      }
+    }
+
+    async function loadSource() {
+      try {
+        const data = await fetchJson('/api/source');
+        sourceTree = Array.isArray(data) ? data : [];
+        renderSource();
+      } catch (e) {
+        els.source.textContent = 'Failed to load source.';
+      }
+    }
+
+    async function importFromMkdocs() {
+      if (!confirm('Import will overwrite current tree state. Continue?')) return;
+      setStatus('Importing...', 'info');
+      try {
+        const data = await fetchJson('/api/import', { method: 'POST' });
+        stateTree = Array.isArray(data.tree) ? data.tree : [];
+        lastPersistedSignature = treeSignature(stateTree);
+        resetHistory();
+        selectedId = '';
+        renderTree();
+        updateHistoryButtons();
+        setStatus('Imported from mkdocs.yml.', 'success');
+      } catch (e) {
+        setStatus(e.message || 'Import failed.', 'error');
+      }
+    }
+
+    async function saveTreeOnly() {
+      setStatus('Saving tree...', 'info');
+      try {
+        await fetchJson('/api/state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tree: stateTree })
+        });
+        lastPersistedSignature = treeSignature(stateTree);
+        setStatus('Tree saved.', 'success');
+      } catch (e) {
+        setStatus(e.message || 'Save failed.', 'error');
+      }
+    }
+
+    async function sync(mode) {
+      const msg = mode === 'sync_files'
+        ? 'This will move .md files (and sibling asset folders) on disk. Continue?'
+        : 'This will write mkdocs.yml nav. Continue?';
+      if (!confirm(msg)) return;
+      setStatus('Syncing...', 'info');
+      try {
+        const data = await fetchJson('/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode, tree: stateTree })
+        });
+        const moves = Array.isArray(data.moves) ? data.moves : [];
+        const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+        const extra = moves.length ? ` moved:${moves.length}` : '';
+        const warn = warnings.length ? ` warnings:${warnings.length}` : '';
+        setStatus(`Sync ok.${extra}${warn}`, warnings.length ? 'info' : 'success');
+        await loadState({ reset: true });
+        await loadSource();
+        lastPersistedSignature = treeSignature(stateTree);
+      } catch (e) {
+        setStatus(e.message || 'Sync failed.', 'error');
+      }
+    }
+
+    function renderSource() {
+      els.source.innerHTML = '';
+      if (!Array.isArray(sourceTree) || !sourceTree.length) {
+        els.source.textContent = '(no markdown files found)';
+        return;
+      }
+      els.source.appendChild(buildSourceList(sourceTree));
+    }
+
+    function buildSourceList(nodes) {
+      const ul = document.createElement('ul');
+      for (const node of (nodes || [])) {
+        const li = document.createElement('li');
+        li.className = 'node ' + (node.kind === 'dir' ? 'dir' : 'page');
+        const title = document.createElement('span');
+        title.className = 'node-title';
+        title.textContent = node.name || '(unnamed)';
+        li.appendChild(title);
+
+        if (node.kind === 'file') {
+          const meta = document.createElement('span');
+          meta.className = 'node-meta';
+          meta.textContent = node.path ? `./${node.path}` : '';
+          li.appendChild(meta);
+          li.addEventListener('click', (e) => {
+            e.stopPropagation();
+            locateByFile(node.path || '');
+          });
+        }
+
+        if (Array.isArray(node.children) && node.children.length) {
+          li.appendChild(buildSourceList(node.children));
+        }
+        ul.appendChild(li);
+      }
+      return ul;
+    }
+
+    function locateByFile(file) {
+      const normalized = normalizePath(file);
+      if (!normalized) return;
+      const all = Array.from(document.querySelectorAll('#tree li[data-file]'));
+      all.forEach(el => el.classList.remove('flash'));
+      const hit = all.find(el => normalizePath(el.dataset.file || '') === normalized);
+      if (!hit) {
+        setStatus('Not found in tree.', 'info');
+        return;
+      }
+      hit.classList.add('flash');
+      hit.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => hit.classList.remove('flash'), 900);
+    }
+
+    function normalizePath(path) {
+      return (path || '').trim().replace(/^\.\//, '').replace(/\\/g, '/').replace(/\/+/g, '/').toLowerCase();
+    }
+
+    function renderTree() {
+      els.tree.innerHTML = '';
+      dropLineEl = dropLineEl || document.createElement('div');
+      dropLineEl.className = 'drop-line';
+      const list = buildTreeList(Array.isArray(stateTree) ? stateTree : [], true);
+      els.tree.appendChild(list);
+      els.tree.appendChild(dropLineEl);
+      hideDropLine();
+      if (!stateTree.length) {
+        const hint = document.createElement('div');
+        hint.className = 'empty-hint';
+        hint.textContent = '(empty)';
+        els.tree.appendChild(hint);
+      }
+    }
+
+    function buildTreeList(nodes, isRoot = false) {
+      const ul = document.createElement('ul');
+      ul.className = isRoot ? 'tree-root' : 'tree-children';
+      for (const node of (nodes || [])) {
+        const li = document.createElement('li');
+        li.className = 'node ' + (node.type === 'folder' ? 'dir' : 'page');
+        li.draggable = true;
+        li.dataset.id = node.id || '';
+        li.dataset.type = node.type || 'page';
+        li.dataset.title = node.title || '';
+        li.dataset.segment = node.segment || '';
+        li.dataset.file = node.file || '';
+
+        if (li.dataset.id === selectedId) li.classList.add('selected');
+
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectedId = li.dataset.id;
+          renderTree();
+        });
+
+        const title = document.createElement('span');
+        title.className = 'node-title';
+        title.textContent = node.title || '(untitled)';
+        row.appendChild(title);
+
+        const meta = document.createElement('span');
+        meta.className = 'node-meta';
+        if (node.type === 'folder') meta.textContent = node.segment ? `dir:${node.segment}` : '';
+        else meta.textContent = node.file ? `./${node.file}` : '(no file)';
+        row.appendChild(meta);
+
+        li.appendChild(row);
+
+        li.addEventListener('dragstart', onDragStart);
+        li.addEventListener('dragend', onDragEnd);
+
+        if (node.type === 'folder') {
+          const children = Array.isArray(node.children) ? node.children : [];
+          li.appendChild(buildTreeList(children, false));
+        }
+        ul.appendChild(li);
+      }
+      return ul;
+    }
+
+    function onDragStart(e) {
+      // dragstart bubbles: prevent parent <li> handlers from overwriting draggedId
+      e.stopPropagation();
+      draggedId = e.currentTarget.dataset.id || '';
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', draggedId);
+      e.currentTarget.classList.add('dragging');
+      pushDebug('drag.start', { draggedId, type: e.currentTarget.dataset.type || '', title: e.currentTarget.dataset.title || '' });
+    }
+
+    function onDragEnd(e) {
+      // dragend bubbles too; keep state consistent
+      e.stopPropagation();
+      if (e && e.currentTarget) e.currentTarget.classList.remove('dragging');
+      draggedId = '';
+      clearDropVisual();
+      pushDebug('drag.end', {});
+    }
+
+    function onTreeDragLeave(e) {
+      if (!e) return;
+      const related = e.relatedTarget;
+      if (related && els.tree.contains(related)) {
+        return;
+      }
+      clearDropVisual();
+    }
+
+    function onTreeDragOver(e) {
+      if (!draggedId) return;
+      e.preventDefault();
+      updateDropHintFromPointer(e.clientX, e.clientY);
+    }
+
+    function onTreeDrop(e) {
+      if (!draggedId) return;
+      e.preventDefault();
+      pushDebug('drop.before', { draggedId, dropHint });
+      applyDrop();
+      clearDropVisual();
+      renderTree();
+    }
+
+    function updateDropHintFromPointer(clientX, clientY) {
+      const el = document.elementFromPoint(clientX, clientY);
+      if (!el) {
+        dropHint = { mode: 'root', targetId: '' };
+        showRootDrop();
+        logDropHint('root', '');
+        return;
+      }
+
+      const li = el.closest('#tree li.node');
+      if (!li) {
+        // Over whitespace: if inside a folder's children box, treat as inside; otherwise root.
+        const ul = el.closest('#tree ul');
+        const parentFolder = ul ? ul.closest('li[data-type="folder"]') : null;
+        if (parentFolder) {
+          const folderId = parentFolder.dataset.id || '';
+          dropHint = { mode: 'inside', targetId: folderId };
+          showInside(parentFolder);
+          logDropHint('inside', folderId);
+        } else {
+          dropHint = { mode: 'root', targetId: '' };
+          showRootDrop();
+          logDropHint('root', '');
+        }
+        return;
+      }
+
+      const targetId = li.dataset.id || '';
+      const type = li.dataset.type || 'page';
+      const row = li.querySelector(':scope > .row') || li;
+      const rowRect = row.getBoundingClientRect();
+      const ratio = rowRect.height ? ((clientY - rowRect.top) / rowRect.height) : 0.5;
+
+      const inChildrenBox = type === 'folder' && (() => {
+        const childUl = li.querySelector(':scope > ul');
+        return childUl && childUl.contains(el) && !row.contains(el);
+      })();
+
+      if (inChildrenBox) {
+        dropHint = { mode: 'inside', targetId };
+        showInside(li);
+        logDropHint('inside', targetId);
+        return;
+      }
+
+      let mode = 'inside';
+      if (ratio <= 0.25) mode = 'before';
+      else if (ratio >= 0.75) mode = 'after';
+      if (type === 'page' && mode === 'inside') mode = ratio < 0.5 ? 'before' : 'after';
+
+      dropHint = { mode, targetId };
+      if (mode === 'inside') showInside(li);
+      else showLineAt(rowRect, mode === 'after');
+      logDropHint(mode, targetId);
+    }
+
+    function logDropHint(mode, targetId) {
+      const sig = `${mode}::${targetId}::${draggedId}`;
+      const now = Date.now();
+      if (sig === lastDropHintSignature && now - lastDragoverLogAt < 120) return;
+      lastDropHintSignature = sig;
+      lastDragoverLogAt = now;
+      const target = targetId ? findNode(stateTree, targetId) : null;
+      pushDebug('drag.over', {
+        draggedId,
+        mode,
+        targetId,
+        targetTitle: target ? target.node.title : null,
+        targetType: target ? target.node.type : null
+      });
+    }
+
+    function applyDrop() {
+      const { mode, targetId } = dropHint || {};
+      if (!mode) return;
+
+      // Never allow moving into/self/descendant; treat as no-op (keeps detector free).
+      const descendant = targetId ? isDescendant(draggedId, targetId) : false;
+      if (targetId && (targetId === draggedId || descendant)) {
+        const dragged = findNode(stateTree, draggedId);
+        const target = findNode(stateTree, targetId);
+        pushDebug('drop.noop', {
+          reason: targetId === draggedId ? 'self' : 'target_is_descendant',
+          mode,
+          draggedId,
+          draggedTitle: dragged ? dragged.node.title : null,
+          draggedPath: nodePath(draggedId),
+          targetId,
+          targetTitle: target ? target.node.title : null,
+          targetPath: nodePath(targetId),
+        });
+        setStatus(targetId === draggedId ? 'Invalid: dropped on itself.' : 'Invalid: cannot drop a parent into its child.', 'info');
+        return;
+      }
+
+      if (mode === 'root') {
+        pushDebug('drop.apply', { mode, targetId: '' });
+        withHistory('drop.root', () => moveNodeToRoot(draggedId));
+        setStatus('Moved.', 'success');
+        return;
+      }
+      if (mode === 'inside') {
+        pushDebug('drop.apply', { mode, targetId });
+        withHistory('drop.inside', () => moveIntoFolder(draggedId, targetId));
+        setStatus('Moved.', 'success');
+        return;
+      }
+      if (mode === 'before' || mode === 'after') {
+        pushDebug('drop.apply', { mode, targetId });
+        withHistory(`drop.${mode}`, () => moveNode(draggedId, targetId, mode));
+        setStatus('Moved.', 'success');
+      }
+    }
+
+    function isDescendant(dragId, targetId) {
+      const drag = findNode(stateTree, dragId);
+      const target = findNode(stateTree, targetId);
+      if (!drag || !target) return false;
+      let p = target.parent;
+      while (p) {
+        if (p.id === drag.node.id) return true;
+        const parentInfo = findNode(stateTree, p.id);
+        p = parentInfo ? parentInfo.parent : null;
+      }
+      return false;
+    }
+
+    function detachNode(id) {
+      const found = findNode(stateTree, id);
+      if (!found) return null;
+      const idx = found.siblings.findIndex(n => n.id === id);
+      if (idx < 0) return null;
+      return found.siblings.splice(idx, 1)[0];
+    }
+
+    function detachNodeWithContext(id) {
+      const found = findNode(stateTree, id);
+      if (!found) return null;
+      const idx = found.siblings.findIndex(n => n.id === id);
+      if (idx < 0) return null;
+      const node = found.siblings.splice(idx, 1)[0];
+      return { node, siblings: found.siblings, index: idx };
+    }
+
+    function nodePath(id) {
+      if (!id) return [];
+      const found = findNode(stateTree, id);
+      if (!found) return [];
+      const parts = [found.node.title || found.node.id];
+      let p = found.parent;
+      while (p) {
+        parts.push(p.title || p.id);
+        const parentInfo = findNode(stateTree, p.id);
+        p = parentInfo ? parentInfo.parent : null;
+      }
+      return parts.reverse();
+    }
+
+    function restoreDetached(ctx) {
+      if (!ctx || !ctx.node || !ctx.siblings) return;
+      const idx = typeof ctx.index === 'number' ? ctx.index : ctx.siblings.length;
+      ctx.siblings.splice(Math.min(Math.max(idx, 0), ctx.siblings.length), 0, ctx.node);
+    }
+
+    function moveNodeToRoot(id) {
+      const ctx = detachNodeWithContext(id);
+      if (!ctx) return;
+      pushDebug('move.root', { id, title: ctx.node.title, fromIndex: ctx.index, fromPath: nodePath(id) });
+      stateTree.push(ctx.node);
+      pushDebug('move.root.done', { rootCount: stateTree.length });
+    }
+
+    function moveIntoFolder(dragId, folderId) {
+      const folder = findNode(stateTree, folderId);
+      if (!folder || folder.node.type !== 'folder') return;
+      const ctx = detachNodeWithContext(dragId);
+      if (!ctx) return;
+      folder.node.children = Array.isArray(folder.node.children) ? folder.node.children : [];
+      pushDebug('move.inside', {
+        dragId,
+        folderId,
+        fromPath: nodePath(dragId),
+        toPath: nodePath(folderId),
+        insertIndex: folder.node.children.length
+      });
+      folder.node.children.push(ctx.node);
+    }
+
+    function moveNode(dragId, targetId, mode) {
+      const targetInfo = findNode(stateTree, targetId);
+      if (!targetInfo) return;
+      const ctx = detachNodeWithContext(dragId);
+      if (!ctx) return;
+
+      if (mode === 'inside' && targetInfo.node.type === 'folder') {
+        targetInfo.node.children = Array.isArray(targetInfo.node.children) ? targetInfo.node.children : [];
+        targetInfo.node.children.push(ctx.node);
+        return;
+      }
+      const siblings = targetInfo.siblings;
+      const idx = siblings.findIndex(n => n.id === targetId);
+      if (idx < 0) {
+        pushDebug('move.restore', { reason: 'target_missing', dragId, targetId });
+        restoreDetached(ctx);
+        return;
+      }
+      pushDebug('move.sibling', {
+        dragId,
+        targetId,
+        mode,
+        targetIndex: idx,
+        insertIndex: mode === 'before' ? idx : idx + 1,
+        toParent: targetInfo.parent ? (targetInfo.parent.title || targetInfo.parent.id) : null
+      });
+      siblings.splice(mode === 'before' ? idx : idx + 1, 0, ctx.node);
+    }
+
+    function clearDropVisual() {
+      dropHint = { mode: null, targetId: null };
+      els.tree.classList.remove('drop-root');
+      hideDropLine();
+      document.querySelectorAll('#tree .drop-before, #tree .drop-after, #tree .drop-inside')
+        .forEach(el => el.classList.remove('drop-before', 'drop-after', 'drop-inside'));
+    }
+
+    function hideDropLine() {
+      if (!dropLineEl) return;
+      dropLineEl.style.display = 'none';
+    }
+
+    function showRootDrop() {
+      els.tree.classList.add('drop-root');
+      hideDropLine();
+      document.querySelectorAll('#tree .drop-inside').forEach(el => el.classList.remove('drop-inside'));
+    }
+
+    function showInside(li) {
+      els.tree.classList.remove('drop-root');
+      hideDropLine();
+      document.querySelectorAll('#tree .drop-inside').forEach(el => el.classList.remove('drop-inside'));
+      if (li) li.classList.add('drop-inside');
+    }
+
+    function showLineAt(targetRect, placeAfter) {
+      els.tree.classList.remove('drop-root');
+      document.querySelectorAll('#tree .drop-inside').forEach(el => el.classList.remove('drop-inside'));
+      if (!dropLineEl) return;
+      const containerRect = els.tree.getBoundingClientRect();
+      const y = (placeAfter ? targetRect.bottom : targetRect.top) - containerRect.top + els.tree.scrollTop;
+      dropLineEl.style.top = (y - 1) + 'px';
+      dropLineEl.style.display = 'block';
+    }
+
+    function createNode(type) {
+      const title = prompt(type === 'folder' ? 'Folder title:' : 'Page title:');
+      if (!title || !title.trim()) return;
+
+      withHistory('create', () => {
+        const parentInfo = selectedId ? findNode(stateTree, selectedId) : null;
+        let container = stateTree;
+        if (parentInfo) {
+          if (parentInfo.node.type === 'folder') {
+            parentInfo.node.children = Array.isArray(parentInfo.node.children) ? parentInfo.node.children : [];
+            container = parentInfo.node.children;
+          } else if (parentInfo.parent && parentInfo.parent.type === 'folder') {
+            parentInfo.parent.children = Array.isArray(parentInfo.parent.children) ? parentInfo.parent.children : [];
+            container = parentInfo.parent.children;
+          }
+        }
+
+        const id = crypto && crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : String(Date.now());
+        if (type === 'folder') {
+          container.push({ id, type: 'folder', title: title.trim(), segment: '', file: null, children: [] });
+        } else {
+          container.push({ id, type: 'page', title: title.trim(), file: null, segment: null, children: [] });
+        }
+      });
+      renderTree();
+      updateHistoryButtons();
+      setStatus('Created (remember to Sync to create/move files).', 'info');
+    }
+
+    function renameSelected() {
+      if (!selectedId) return setStatus('Select a node first.', 'info');
+      const info = findNode(stateTree, selectedId);
+      if (!info) return;
+      const next = prompt('New title:', info.node.title || '');
+      if (!next || !next.trim()) return;
+      withHistory('rename', () => {
+        info.node.title = next.trim();
+      });
+      renderTree();
+      updateHistoryButtons();
+      setStatus('Renamed.', 'success');
+    }
+
+    function deleteSelected() {
+      if (!selectedId) return setStatus('Select a node first.', 'info');
+      const ok = confirm('Delete selected node (tree only). Continue?');
+      if (!ok) return;
+      let removed = null;
+      withHistory('delete', () => {
+        removed = detachNode(selectedId);
+      });
+      selectedId = '';
+      renderTree();
+      updateHistoryButtons();
+      setStatus(removed ? 'Deleted.' : 'Not found.', removed ? 'success' : 'info');
+    }
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,290 @@
+:root {
+  color-scheme: light;
+  --bg: #0b1020;
+  --panel: #111a33;
+  --card: #0f1830;
+  --text: #e8eefc;
+  --muted: rgba(232, 238, 252, 0.7);
+  --border: rgba(232, 238, 252, 0.12);
+  --accent: #6aa9ff;
+  --success: #33d17a;
+  --error: #ff6b6b;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  background: radial-gradient(1200px 800px at 20% 10%, rgba(106, 169, 255, 0.18), transparent 55%),
+    radial-gradient(1200px 800px at 80% 0%, rgba(51, 209, 122, 0.10), transparent 60%),
+    var(--bg);
+  color: var(--text);
+}
+
+.shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.toolbar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.title h1 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: 0.2px;
+}
+
+.muted { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.actions .group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition: transform 0.06s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+button.ghost {
+  background: transparent;
+}
+
+button.active {
+  border-color: rgba(106, 169, 255, 0.55);
+  background: rgba(106, 169, 255, 0.10);
+}
+
+button:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(106, 169, 255, 0.35);
+}
+
+button:active { transform: translateY(1px); }
+
+.panes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.card {
+  background: rgba(17, 26, 51, 0.62);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  backdrop-filter: blur(8px);
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.card-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
+
+.inline-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.inline-actions button { padding: 8px 10px; border-radius: 10px; }
+
+.list-shell {
+  position: relative;
+  padding: 12px;
+  min-height: 520px;
+  max-height: calc(100vh - 220px);
+  overflow: auto;
+}
+
+#tree.drop-root {
+  outline: 2px dashed rgba(106, 169, 255, 0.28);
+  outline-offset: -8px;
+  border-radius: 16px;
+}
+
+ul { list-style: none; padding-left: 18px; margin: 0; }
+
+.drop-line {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 999px;
+  display: none;
+  box-shadow: 0 0 0 3px rgba(106, 169, 255, 0.14);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.node { margin: 6px 0; }
+.row {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+}
+
+.node.dir > .row { background: rgba(106, 169, 255, 0.06); }
+.node.page > .row { background: rgba(255, 255, 255, 0.04); }
+
+.node-title { font-weight: 600; font-size: 13px; }
+.node-meta { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55%; }
+
+.node.selected > .row { border-color: rgba(106, 169, 255, 0.55); }
+.node.drop-before > .row::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: -3px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.node.drop-after > .row::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -3px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 999px;
+}
+
+.node.drop-inside > .row { outline: 2px solid rgba(106, 169, 255, 0.4); }
+.node.drop-inside > ul { outline: 2px dashed rgba(106, 169, 255, 0.28); outline-offset: 6px; border-radius: 16px; }
+
+.node.dir > ul {
+  margin: 8px 0 8px 14px;
+  padding: 10px 10px 10px 10px;
+  border: 1px solid var(--border);
+  border-left: 2px solid rgba(106, 169, 255, 0.35);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.node.dir > ul:empty {
+  min-height: 42px;
+}
+
+.node.dir > ul:empty::after {
+  content: "Drop here";
+  display: block;
+  color: rgba(232, 238, 252, 0.45);
+  font-size: 12px;
+  padding: 8px 10px;
+}
+
+.list-shell > ul { min-height: 44px; }
+
+.empty-hint {
+  color: var(--muted);
+  font-size: 13px;
+  padding: 10px 6px 0;
+}
+
+.flash > .row { animation: flash 0.9s ease; }
+@keyframes flash {
+  0% { outline: 2px solid rgba(106, 169, 255, 0.0); }
+  30% { outline: 2px solid rgba(106, 169, 255, 0.8); }
+  100% { outline: 2px solid rgba(106, 169, 255, 0.0); }
+}
+
+footer#status {
+  margin-top: 14px;
+  padding: 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(17, 26, 51, 0.62);
+}
+
+footer#status[data-type="success"] { border-color: rgba(51, 209, 122, 0.55); }
+footer#status[data-type="error"] { border-color: rgba(255, 107, 107, 0.6); }
+
+.debug-panel {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(17, 26, 51, 0.62);
+  overflow: hidden;
+}
+
+.debug-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.debug-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(232, 238, 252, 0.85);
+  letter-spacing: 0.2px;
+}
+
+.debug-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.debug-actions button {
+  padding: 7px 10px;
+  border-radius: 10px;
+}
+
+.debug-log {
+  margin: 0;
+  padding: 10px 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: rgba(232, 238, 252, 0.78);
+}
+
+@media (max-width: 980px) {
+  .panes { grid-template-columns: 1fr; }
+  .node-meta { max-width: 45%; }
+}
