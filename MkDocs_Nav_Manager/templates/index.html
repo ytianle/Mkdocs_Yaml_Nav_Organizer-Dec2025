@@ -165,7 +165,7 @@
     let showInfo = false;
     let theme = 'dark';
 
-    document.addEventListener('DOMContentLoaded', () => {
+	    document.addEventListener('DOMContentLoaded', () => {
       els = {
         meta: document.getElementById('meta'),
         status: document.getElementById('status'),
@@ -206,7 +206,7 @@
         toggleTheme: document.getElementById('toggle-theme'),
       };
 
-      els.toolImportBtn.addEventListener('click', importFromMkdocs);
+		      els.toolImportBtn.addEventListener('click', () => importFromMkdocs({ confirm: true }));
 
       els.newFolderBtn.addEventListener('click', () => createNode('folder'));
       els.newPageBtn.addEventListener('click', () => createNode('page'));
@@ -289,10 +289,38 @@
         }
       });
 
-      loadMeta();
-      loadState();
-      loadSource();
-    });
+	      loadMeta();
+	      // Default: auto-load mkdocs.yml on entry. If invalid, block rendering.
+	      bootstrap();
+		    });
+
+		    async function bootstrap() {
+		      setStatus('Loading mkdocs.yml...', 'info');
+		      try {
+		        const data = await fetchJson('/api/import', { method: 'POST' });
+		        stateTree = Array.isArray(data.tree) ? data.tree : [];
+		        const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+		        lastPersistedSignature = treeSignature(stateTree);
+		        resetHistory();
+		        renderTree();
+		        updateHistoryButtons();
+		        await loadSource();
+		        setStatus(warnings.length ? `Loaded with warnings (${warnings.length}).` : 'Loaded from mkdocs.yml.', warnings.length ? 'info' : 'success');
+		      } catch (e) {
+		        const data = e && e.data ? e.data : null;
+		        if (data && Array.isArray(data.errors)) {
+		          const count = data.errors.length;
+		          setStatus(`Import blocked: ${count} illegal doc path(s).`, 'error');
+		          pushDebug('import.blocked', { errors: data.errors });
+		          if (els.tree) els.tree.textContent = 'Blocked: invalid mkdocs.yml paths.';
+		          if (els.source) els.source.textContent = 'Blocked.';
+		          clearSelection();
+		          return;
+		        }
+		        setStatus(e.message || 'Import failed.', 'error');
+		        if (els.tree) els.tree.textContent = 'Failed to load tree.';
+		      }
+		    }
 
     function initTheme() {
       theme = localStorage.getItem('page_tree_theme') || 'dark';
@@ -891,22 +919,34 @@
       }
     }
 
-    async function importFromMkdocs() {
-      if (!confirm('Import will overwrite current tree state. Continue?')) return;
-      setStatus('Importing...', 'info');
-      try {
-        const data = await fetchJson('/api/import', { method: 'POST' });
-        stateTree = Array.isArray(data.tree) ? data.tree : [];
-        lastPersistedSignature = treeSignature(stateTree);
-        resetHistory();
-        selectedId = '';
-        renderTree();
-        updateHistoryButtons();
-        setStatus('Imported from mkdocs.yml.', 'success');
-      } catch (e) {
-        setStatus(e.message || 'Import failed.', 'error');
-      }
-    }
+	    async function importFromMkdocs(options) {
+	      const opts = options || {};
+	      const shouldConfirm = opts.confirm !== false;
+	      if (shouldConfirm) {
+	        if (!confirm('Import will overwrite current tree state. Continue?')) return;
+	      }
+	      setStatus('Importing...', 'info');
+	      try {
+	        const data = await fetchJson('/api/import', { method: 'POST' });
+	        stateTree = Array.isArray(data.tree) ? data.tree : [];
+	        const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+	        lastPersistedSignature = treeSignature(stateTree);
+	        resetHistory();
+	        selectedId = '';
+	        renderTree();
+	        updateHistoryButtons();
+	        setStatus(warnings.length ? `Imported with warnings (${warnings.length}).` : 'Imported from mkdocs.yml.', warnings.length ? 'info' : 'success');
+	        await loadSource();
+	      } catch (e) {
+	        const data = e && e.data ? e.data : null;
+	        if (data && Array.isArray(data.errors)) {
+	          setStatus(`Import blocked: ${data.errors.length} illegal doc path(s).`, 'error');
+	          pushDebug('import.blocked', { errors: data.errors });
+	          return;
+	        }
+	        setStatus(e.message || 'Import failed.', 'error');
+	      }
+	    }
 
     async function sync(mode, options) {
       const opts = options || {};

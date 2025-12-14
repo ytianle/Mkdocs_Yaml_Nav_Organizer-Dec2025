@@ -466,6 +466,31 @@ def _plan_file_sync(
     collisions: list[dict[str, Any]] = []
     planned_sources: set[Path] = set()
     planned_targets: set[Path] = set()
+    used_rel: set[str] = set()
+
+    def _unique_rel(desired_rel: str) -> str:
+        desired_rel = _safe_rel_path(desired_rel)
+        if desired_rel not in used_rel and not (DOCS_ROOT / desired_rel).exists():
+            used_rel.add(desired_rel)
+            return desired_rel
+
+        parent = Path(desired_rel).parent.as_posix()
+        base = Path(desired_rel).name
+        stem = Path(base).stem
+        suffix = Path(base).suffix
+        i = 2
+        while True:
+            cand_base = f"{stem}-{i}{suffix}"
+            cand_rel = f"{parent}/{cand_base}" if parent and parent != "." else cand_base
+            cand_rel = _safe_rel_path(cand_rel)
+            if cand_rel in used_rel:
+                i += 1
+                continue
+            cand_path = DOCS_ROOT / cand_rel
+            if not cand_path.exists():
+                used_rel.add(cand_rel)
+                return cand_rel
+            i += 1
 
     def walk(items: list[Node], ancestors: list[Node]):
         folder_dir = _compute_folder_dir(ancestors)
@@ -479,25 +504,20 @@ def _plan_file_sync(
             # If a user renamed a file in the editor, prefer the previous path as the source for moving.
             current_rel = _safe_rel_path(node.file_prev) if node.file_prev else (_safe_rel_path(node.file) if node.file else desired_rel)
             src = DOCS_ROOT / current_rel
-            dst = DOCS_ROOT / desired_rel
+            unique_rel = _unique_rel(desired_rel)
+            if unique_rel != desired_rel:
+                warnings.append({"type": "filename_collision", "from": desired_rel, "to": unique_rel, "title": node.title})
+            dst = DOCS_ROOT / unique_rel
             if not src.exists():
                 warnings.append({"type": "missing_file", "file": current_rel, "title": node.title})
                 if create_missing:
-                    _create_missing_page(desired_rel, node.title)
-                    node.file = desired_rel
+                    _create_missing_page(unique_rel, node.title)
+                    node.file = unique_rel
                     node.file_prev = None
                 continue
 
             planned_sources.add(src.resolve())
             # Detect internal duplicates early.
-            if dst.resolve() in planned_targets and dst.resolve() != src.resolve():
-                collisions.append(
-                    {
-                        "type": "duplicate_target",
-                        "target": desired_rel,
-                        "title": node.title,
-                    }
-                )
             planned_targets.add(dst.resolve())
 
             if src != dst:
@@ -507,25 +527,12 @@ def _plan_file_sync(
                 dst_assets = dst.with_suffix("")
                 if src_assets.exists() and src_assets.is_dir():
                     asset_moves.append((src_assets, dst_assets))
-            node.file = desired_rel
+            node.file = unique_rel
             node.file_prev = None
 
     walk(nodes, [])
 
-    # Detect collisions with existing files/dirs that are not part of the move plan.
-    planned_sources |= {s.resolve() for s, _ in asset_moves}
-    for _, dst in page_moves + asset_moves:
-        dst_res = dst.resolve()
-        if dst.exists() and dst_res not in planned_sources:
-            collisions.append(
-                {
-                    "type": "exists",
-                    "target": dst.relative_to(DOCS_ROOT).as_posix(),
-                }
-            )
-
-    if collisions:
-        return [], [], warnings, collisions
+    # Collisions are now resolved by auto-renaming targets; we keep the return shape for API stability.
 
     _ensure_unique_targets(page_moves + asset_moves)
     return page_moves, asset_moves, warnings, []
@@ -554,6 +561,64 @@ def _create_missing_page(file_rel: str, title: str) -> None:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(f"# {title.strip() or 'Untitled'}\n", encoding="utf-8")
+
+
+def _validate_imported_tree(nodes: list["Node"]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    errors: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+
+    def walk(items: list["Node"], trail: list[str]):
+        for node in items:
+            if node.type == "folder":
+                walk(node.children or [], trail + [node.title or node.segment or "(section)"])
+                continue
+            file_rel = (node.file or "").strip()
+            if not file_rel:
+                warnings.append(
+                    {
+                        "type": "missing_file_field",
+                        "title": node.title,
+                        "path": " / ".join(trail + [node.title or "(page)"]),
+                    }
+                )
+                continue
+            try:
+                safe_rel = _safe_rel_path(file_rel)
+                if Path(safe_rel).suffix.lower() not in ALLOWED_DOC_EXTS:
+                    errors.append(
+                        {
+                            "type": "invalid_extension",
+                            "file": file_rel,
+                            "title": node.title,
+                            "path": " / ".join(trail + [node.title or "(page)"]),
+                        }
+                    )
+                    continue
+                abs_path = _safe_docs_path(safe_rel)
+            except Exception as exc:
+                errors.append(
+                    {
+                        "type": "illegal_path",
+                        "file": file_rel,
+                        "title": node.title,
+                        "path": " / ".join(trail + [node.title or "(page)"]),
+                        "error": str(exc),
+                    }
+                )
+                continue
+
+            if not abs_path.exists() or not abs_path.is_file():
+                warnings.append(
+                    {
+                        "type": "missing_file",
+                        "file": file_rel,
+                        "title": node.title,
+                        "path": " / ".join(trail + [node.title or "(page)"]),
+                    }
+                )
+
+    walk(nodes, [])
+    return errors, warnings
 
 
 def _safe_docs_path(rel: str) -> Path:
@@ -851,8 +916,11 @@ def api_import():
         return _json_error(str(exc), 500)
     nodes = _import_mkdocs_nav(config.get("nav", CommentedSeq()))
     _infer_segments_in_place(nodes)
+    errors, warnings = _validate_imported_tree(nodes)
+    if errors:
+        return _json_error("Import blocked: mkdocs.yml contains illegal doc paths.", 409, errors=errors)
     _save_state(nodes)
-    return jsonify({"status": "ok", "tree": [n.to_dict() for n in nodes]})
+    return jsonify({"status": "ok", "tree": [n.to_dict() for n in nodes], "warnings": warnings})
 
 
 @app.route("/api/source", methods=["GET"])
