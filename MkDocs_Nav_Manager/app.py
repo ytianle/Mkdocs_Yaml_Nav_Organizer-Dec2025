@@ -27,6 +27,8 @@ app = Flask(
 
 yaml = YAML()
 yaml.preserve_quotes = True
+# mkdocs.yml style: keep nav and nested blocks compact with 2-space indentation.
+yaml.indent(mapping=2, sequence=2, offset=2)
 
 ALLOWED_DOC_EXTS = {".md", ".markdown", ".mdx"}
 
@@ -160,6 +162,7 @@ class Node:
     segment: str | None = None  # for folder, stable physical dir name
     file: str | None = None  # for page, relative path under DOCS_ROOT
     file_prev: str | None = None  # for page, previous relative path (rename support)
+    is_overview: bool = False  # for page: section overview page (title-less, fixed slot)
     children: list["Node"] | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -170,6 +173,7 @@ class Node:
             "segment": self.segment,
             "file": self.file,
             "file_prev": self.file_prev,
+            "is_overview": self.is_overview,
             "children": [c.to_dict() for c in (self.children or [])],
         }
 
@@ -178,8 +182,9 @@ def _node_from_dict(data: dict[str, Any]) -> Node:
     node_type = str(data.get("type") or "").strip()
     if node_type not in {"folder", "page"}:
         raise ValueError("Invalid node type.")
+    is_overview = bool(data.get("is_overview", False))
     title = str(data.get("title") or "").strip()
-    if not title:
+    if not title and not is_overview:
         raise ValueError("Title is required.")
     node_id = str(data.get("id") or "").strip() or _new_id()
     segment = data.get("segment")
@@ -209,7 +214,16 @@ def _node_from_dict(data: dict[str, Any]) -> Node:
         prev_str = _safe_rel_path(prev_str)
     if children:
         raise ValueError("Page node cannot have children.")
-    return Node(id=node_id, type="page", title=title, segment=None, file=file_str, file_prev=prev_str, children=[])
+    return Node(
+        id=node_id,
+        type="page",
+        title=title,
+        segment=None,
+        file=file_str,
+        file_prev=prev_str,
+        is_overview=is_overview,
+        children=[],
+    )
 
 
 def _flatten_pages(nodes: Iterable[Node]) -> list[Node]:
@@ -234,9 +248,12 @@ def _infer_segment_from_children(folder: Node, parent_prefix: str) -> str | None
                     prefix = f"{parent_prefix}/"
                     if remainder.startswith(prefix):
                         remainder = remainder[len(prefix) :]
-                parts = remainder.split("/")
-                if parts and parts[0]:
-                    candidates.append(parts[0])
+                # Only infer a directory segment when the remainder actually contains a directory.
+                # A direct child page like "<parent>/index.md" provides no segment signal.
+                if "/" in remainder:
+                    parts = remainder.split("/")
+                    if parts and parts[0]:
+                        candidates.append(parts[0])
             if n.type == "folder":
                 walk(n.children or [])
 
@@ -265,14 +282,59 @@ def _infer_segments_in_place(nodes: list[Node], parent_prefix: str = "") -> None
         _infer_segments_in_place(node.children or [], next_prefix)
 
 
-def _import_mkdocs_nav(nav_items: Any, parent_prefix: str = "") -> list[Node]:
+def _ensure_section_overviews_in_place(nodes: list[Node], parent_dir: str = "") -> None:
+    """Best-effort: if a folder has an unlabeled first item or README/index direct child, mark it as overview."""
+
+    for folder in nodes:
+        if folder.type != "folder":
+            continue
+
+        folder_dir = f"{parent_dir}/{folder.segment}".strip("/") if folder.segment else parent_dir
+        children = list(folder.children or [])
+
+        # If there is already an overview node, keep it and force it to the front.
+        ov_idx = next((i for i, c in enumerate(children) if c.type == "page" and c.is_overview), None)
+        if ov_idx is not None:
+            ov = children.pop(ov_idx)
+            children.insert(0, ov)
+        else:
+            # Mark a direct child README/index as overview if present; otherwise keep empty slot.
+            for i, child in enumerate(children):
+                if child.type != "page" or not child.file:
+                    continue
+                rel = _safe_rel_path(child.file)
+                if folder_dir:
+                    if not rel.startswith(f"{folder_dir}/"):
+                        continue
+                    base = rel[len(folder_dir) + 1 :]
+                else:
+                    base = rel
+                if "/" in base:
+                    continue
+                if Path(base).name.lower() in {"readme.md", "index.md"}:
+                    child.is_overview = True
+                    children.pop(i)
+                    children.insert(0, child)
+                    break
+
+        folder.children = children
+        _ensure_section_overviews_in_place(folder.children or [], folder_dir)
+
+
+def _import_mkdocs_nav(nav_items: Any, parent_prefix: str = "", depth: int = 0) -> list[Node]:
     nodes: list[Node] = []
     if not isinstance(nav_items, (list, CommentedSeq)):
         return nodes
+    first = True
     for entry in nav_items:
         if isinstance(entry, str):
             rel = _safe_rel_path(entry)
-            nodes.append(Node(id=_new_id(), type="page", title=entry, file=rel, children=[]))
+            if first:
+                # Section overview: allow first item to be a plain path (no title).
+                nodes.append(Node(id=_new_id(), type="page", title="", file=rel, is_overview=True, children=[]))
+            else:
+                nodes.append(Node(id=_new_id(), type="page", title=entry, file=rel, children=[]))
+            first = False
             continue
 
         if isinstance(entry, (dict, CommentedMap)):
@@ -288,31 +350,67 @@ def _import_mkdocs_nav(nav_items: Any, parent_prefix: str = "") -> list[Node]:
                     type="folder",
                     title=title_str,
                     segment=_slugify(title_str),
-                    children=_import_mkdocs_nav(value, parent_prefix),
+                    children=_import_mkdocs_nav(value, parent_prefix, depth + 1),
                 )
                 nodes.append(folder)
+                first = False
                 continue
 
             if value is None:
                 folder = Node(id=_new_id(), type="folder", title=title_str, segment=_slugify(title_str), children=[])
                 nodes.append(folder)
+                first = False
                 continue
 
             rel = _safe_rel_path(str(value))
-            nodes.append(Node(id=_new_id(), type="page", title=title_str, file=rel, children=[]))
+            # Back-compat: "Overview: path" is treated as the section overview.
+            if title_str.lower() == "overview":
+                nodes.append(Node(id=_new_id(), type="page", title="", file=rel, is_overview=True, children=[]))
+            # Rule: at top-level, "Title: path" means a Section with a Display Page.
+            # Inside a section list, "Title: path" means a normal Page.
+            elif depth == 0:
+                folder = Node(
+                    id=_new_id(),
+                    type="folder",
+                    title=title_str,
+                    segment=_slugify(title_str),
+                    children=[Node(id=_new_id(), type="page", title="", file=rel, is_overview=True, children=[])],
+                )
+                nodes.append(folder)
+            else:
+                nodes.append(Node(id=_new_id(), type="page", title=title_str, file=rel, children=[]))
+            first = False
             continue
 
         nodes.append(Node(id=_new_id(), type="page", title=str(entry), file=None, children=[]))
+        first = False
 
     return nodes
 
 
-def _tree_to_mkdocs_nav(nodes: Iterable[Node]) -> CommentedSeq:
+def _tree_to_mkdocs_nav(nodes: Iterable[Node], depth: int = 0) -> CommentedSeq:
     nav = CommentedSeq()
     for node in nodes:
         title = (node.title or "").strip() or "untitled"
         if node.type == "folder":
-            nav.append(CommentedMap({title: _tree_to_mkdocs_nav(node.children or [])}))
+            children = list(node.children or [])
+            overview = next((c for c in children if c.type == "page" and c.is_overview and c.file), None)
+            rest = [c for c in children if c is not overview]
+
+            # If this is a top-level section with only a display page, serialize as "Title: path".
+            if depth == 0 and overview and not rest:
+                nav.append(CommentedMap({title: _safe_rel_path(overview.file)}))
+                continue
+
+            seq = CommentedSeq()
+            if overview and overview.file:
+                seq.append(_safe_rel_path(overview.file))
+            seq.extend(_tree_to_mkdocs_nav(rest, depth + 1))
+            nav.append(CommentedMap({title: seq}))
+            continue
+        if node.is_overview:
+            if node.file:
+                nav.append(_safe_rel_path(node.file))
             continue
         if not node.file:
             nav.append(CommentedMap({title: None}))
@@ -468,9 +566,16 @@ def _plan_file_sync(
     planned_targets: set[Path] = set()
     used_rel: set[str] = set()
 
-    def _unique_rel(desired_rel: str) -> str:
+    def _unique_rel(desired_rel: str, *, src: Path, all_sources: set[Path]) -> str:
         desired_rel = _safe_rel_path(desired_rel)
-        if desired_rel not in used_rel and not (DOCS_ROOT / desired_rel).exists():
+        dst = DOCS_ROOT / desired_rel
+        # Allow "existing target" when it's the same file as src, or when the existing file
+        # is a source that will be moved away by this plan.
+        if desired_rel not in used_rel and (
+            (not dst.exists())
+            or (dst.resolve() == src.resolve())
+            or (dst.resolve() in all_sources)
+        ):
             used_rel.add(desired_rel)
             return desired_rel
 
@@ -492,19 +597,37 @@ def _plan_file_sync(
                 return cand_rel
             i += 1
 
-    def walk(items: list[Node], ancestors: list[Node]):
+    entries: list[tuple[Node, list[Node], str, str]] = []
+
+    def collect(items: list[Node], ancestors: list[Node]):
         folder_dir = _compute_folder_dir(ancestors)
         for node in items:
             if node.type == "folder":
-                walk(node.children or [], ancestors + [node])
+                collect(node.children or [], ancestors + [node])
                 continue
             basename = Path(node.file).name if node.file else f"{_slugify(node.title)}.md"
             desired_rel = f"{folder_dir}/{basename}" if folder_dir else basename
             desired_rel = _safe_rel_path(desired_rel)
             # If a user renamed a file in the editor, prefer the previous path as the source for moving.
             current_rel = _safe_rel_path(node.file_prev) if node.file_prev else (_safe_rel_path(node.file) if node.file else desired_rel)
+            entries.append((node, list(ancestors), current_rel, desired_rel))
+
+    collect(nodes, [])
+
+    # Precompute all sources that will be used for the plan (to avoid false collisions when swapping/moving).
+    for node, _anc, current_rel, desired_rel in entries:
+        src = DOCS_ROOT / current_rel
+        if src.exists():
+            planned_sources.add(src.resolve())
+            # Sibling asset folder is also a source that may move.
+            src_assets = src.with_suffix("")
+            if src_assets.exists() and src_assets.is_dir():
+                planned_sources.add(src_assets.resolve())
+
+    def apply(entries_in: list[tuple[Node, list[Node], str, str]]):
+        for node, ancestors, current_rel, desired_rel in entries_in:
             src = DOCS_ROOT / current_rel
-            unique_rel = _unique_rel(desired_rel)
+            unique_rel = _unique_rel(desired_rel, src=src, all_sources=planned_sources)
             if unique_rel != desired_rel:
                 warnings.append({"type": "filename_collision", "from": desired_rel, "to": unique_rel, "title": node.title})
             dst = DOCS_ROOT / unique_rel
@@ -516,8 +639,6 @@ def _plan_file_sync(
                     node.file_prev = None
                 continue
 
-            planned_sources.add(src.resolve())
-            # Detect internal duplicates early.
             planned_targets.add(dst.resolve())
 
             if src != dst:
@@ -530,7 +651,7 @@ def _plan_file_sync(
             node.file = unique_rel
             node.file_prev = None
 
-    walk(nodes, [])
+    apply(entries)
 
     # Collisions are now resolved by auto-renaming targets; we keep the return shape for API stability.
 
@@ -916,6 +1037,7 @@ def api_import():
         return _json_error(str(exc), 500)
     nodes = _import_mkdocs_nav(config.get("nav", CommentedSeq()))
     _infer_segments_in_place(nodes)
+    _ensure_section_overviews_in_place(nodes)
     errors, warnings = _validate_imported_tree(nodes)
     if errors:
         return _json_error("Import blocked: mkdocs.yml contains illegal doc paths.", 409, errors=errors)

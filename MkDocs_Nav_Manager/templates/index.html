@@ -43,16 +43,16 @@
 
           <div class="splitter splitter-v splitter-tools" id="split-tools" title="Drag to resize tools"></div>
 
-          <div class="tools-group">
-            <div class="tools-title">🚀 Main</div>
-            <div class="tools-buttons">
-              <button id="tool-import" type="button" class="ghost"
-                data-help="Rebuild Doc Tree from mkdocs.yml nav (overwrites current draft)">📥 Load mkdocs.yml</button>
-              <span class="sr-only" data-help="All edits auto-sync mkdocs.yml + files"></span>
-              <button id="tool-debug" type="button" class="ghost" data-help="Toggle debug window (DnD logs)">🧪
-                Debug</button>
-            </div>
-          </div>
+	          <div class="tools-group">
+	            <div class="tools-title">🚀 Main</div>
+	            <div class="tools-buttons">
+	              <button id="tool-import" type="button" class="ghost"
+	                data-help="Rebuild Doc Tree from mkdocs.yml nav (overwrites current draft)">📥 Load mkdocs.yml</button>
+	              <span class="sr-only" data-help="All edits auto-sync mkdocs.yml + files"></span>
+	              <button id="tool-debug" type="button" class="ghost" data-help="Toggle debug window (DnD logs)">🧪
+	                Debug</button>
+	            </div>
+	          </div>
         </div>
       </section>
 
@@ -71,14 +71,19 @@
 
         <div class="splitter splitter-v" id="split-main-left" title="Drag to resize"></div>
 
-        <section class="card panel" id="panel-tree">
-          <div class="card-head">
-            <h2>📚 Doc Tree</h2>
-            <div class="inline-actions">
-              <div class="segmented" role="group" aria-label="Depth limit">
-                <button type="button" class="ghost depth-btn" data-depth="1" data-help="Show 1 level">1</button>
-                <button type="button" class="ghost depth-btn" data-depth="2" data-help="Show 2 levels">2</button>
-                <button type="button" class="ghost depth-btn" data-depth="3" data-help="Show 3 levels">3</button>
+	        <section class="card panel" id="panel-tree">
+	          <div class="card-head">
+	            <h2>📚 Doc Tree</h2>
+	            <div class="inline-actions">
+	              <label class="switch" title="" data-help="" id="drag-mode-switch">
+	                <input id="drag-mode-toggle" type="checkbox" aria-label="Drag mode toggle">
+	                <span class="switch-track"></span>
+	                <span class="switch-text" id="drag-mode-text">Drag: Files</span>
+	              </label>
+	              <div class="segmented" role="group" aria-label="Depth limit">
+	                <button type="button" class="ghost depth-btn" data-depth="1" data-help="Show 1 level">1</button>
+	                <button type="button" class="ghost depth-btn" data-depth="2" data-help="Show 2 levels">2</button>
+	                <button type="button" class="ghost depth-btn" data-depth="3" data-help="Show 3 levels">3</button>
                 <button type="button" class="ghost depth-btn" data-depth="4" data-help="Show 4 levels">4</button>
                 <button type="button" class="ghost depth-btn" data-depth="5" data-help="Show 5 levels">5</button>
                 <button type="button" class="ghost depth-btn" data-depth="n" data-help="Show all levels">∞</button>
@@ -157,9 +162,10 @@
     let treeCollapsed = new Set();
     let treeMaxLevel = 'n';
     let toolTipEl = null;
-    let activeInlineEdit = null;
-    let autoSyncTimer = null;
-    let showTools = false;
+		    let activeInlineEdit = null;
+		    let autoSyncTimer = null;
+		    let dragMode = 'sync_files'; // sync_files | nav_only
+		    let showTools = false;
     let showSource = false;
     let showTree = true;
     let showInfo = false;
@@ -188,9 +194,12 @@
         newPageBtn: document.getElementById('new-page-btn'),
         deleteBtn: document.getElementById('delete-btn'),
         toolUndoBtn: document.getElementById('tool-undo'),
-        toolRedoBtn: document.getElementById('tool-redo'),
-        toolImportBtn: document.getElementById('tool-import'),
-        toolDebugBtn: document.getElementById('tool-debug'),
+	        toolRedoBtn: document.getElementById('tool-redo'),
+		        toolImportBtn: document.getElementById('tool-import'),
+		        dragModeToggle: document.getElementById('drag-mode-toggle'),
+		        dragModeSwitch: document.getElementById('drag-mode-switch'),
+		        dragModeText: document.getElementById('drag-mode-text'),
+		        toolDebugBtn: document.getElementById('tool-debug'),
         debugPanel: document.getElementById('debug-panel'),
         debugLog: document.getElementById('debug-log'),
         debugClear: document.getElementById('debug-clear'),
@@ -211,8 +220,9 @@
       els.newFolderBtn.addEventListener('click', () => createNode('folder'));
       els.newPageBtn.addEventListener('click', () => createNode('page'));
       els.deleteBtn.addEventListener('click', deleteSelected);
-      els.toolUndoBtn.addEventListener('click', undo);
-      els.toolRedoBtn.addEventListener('click', redo);
+	      els.toolUndoBtn.addEventListener('click', undo);
+	      els.toolRedoBtn.addEventListener('click', redo);
+	      if (els.dragModeToggle) els.dragModeToggle.addEventListener('change', onDragModeToggle);
 
       els.toolDebugBtn.addEventListener('click', toggleDebug);
       els.debugClear.addEventListener('click', () => {
@@ -249,8 +259,8 @@
       if (els.debugPanel) els.debugPanel.hidden = true;
       updateDebugVisibility();
 
-      initSplitters();
-      bindToolHoverHints();
+		      initSplitters();
+		      bindToolHoverHints();
 
       // Default visible: Tools/Source/Doc Tree/Info (user can toggle).
       showTools = localStorage.getItem('page_tree_show_tools') !== 'false';
@@ -289,10 +299,32 @@
         }
       });
 
+	      dragMode = localStorage.getItem('page_tree_drag_mode') || 'sync_files';
+	      updateDragModeSwitch();
 	      loadMeta();
 	      // Default: auto-load mkdocs.yml on entry. If invalid, block rendering.
 	      bootstrap();
 		    });
+
+		    function onDragModeToggle() {
+		      if (!els.dragModeToggle) return;
+		      dragMode = els.dragModeToggle.checked ? 'sync_files' : 'nav_only';
+		      localStorage.setItem('page_tree_drag_mode', dragMode);
+		      updateDragModeSwitch();
+		      setStatus(dragMode === 'nav_only' ? 'Drag: Nav only' : 'Drag: Nav + Files', 'info');
+		    }
+
+		    function updateDragModeSwitch() {
+		      const isFiles = dragMode === 'sync_files';
+		      if (els.dragModeToggle) els.dragModeToggle.checked = isFiles;
+		      if (els.dragModeText) els.dragModeText.textContent = isFiles ? 'Drag: Files' : 'Drag: Nav';
+		      if (els.dragModeSwitch) {
+		        els.dragModeSwitch.dataset.help = isFiles
+		          ? 'Drag & drop updates mkdocs.yml and moves files on disk'
+		          : 'Drag & drop updates mkdocs.yml nav only (no file moves)';
+		        els.dragModeSwitch.title = els.dragModeSwitch.dataset.help;
+		      }
+		    }
 
 		    async function bootstrap() {
 		      setStatus('Loading mkdocs.yml...', 'info');
@@ -382,14 +414,15 @@
       });
     }
 
-    function scheduleAutoSync(reason) {
-      if (autoSyncTimer) clearTimeout(autoSyncTimer);
-      autoSyncTimer = setTimeout(async () => {
-        autoSyncTimer = null;
-        pushDebug('auto_sync.run', { mode: 'sync_files', reason });
-        await sync('sync_files', { confirm: false, silent: true });
-      }, 250);
-    }
+	    function scheduleAutoSync(reason, modeOverride) {
+	      if (autoSyncTimer) clearTimeout(autoSyncTimer);
+	      const mode = modeOverride || 'sync_files';
+	      autoSyncTimer = setTimeout(async () => {
+	        autoSyncTimer = null;
+	        pushDebug('auto_sync.run', { mode, reason });
+	        await sync(mode, { confirm: false, silent: true });
+	      }, 250);
+	    }
 
     function showToolTip(text, e) {
       if (!toolTipEl) return;
@@ -1304,10 +1337,10 @@
       return title;
     }
 
-    function buildTreeList(nodes, isRoot = false, depth = 0) {
-      const ul = document.createElement('ul');
-      ul.className = isRoot ? 'tree-root tree-explorer' : 'tree-children tree-explorer';
-      for (const node of (nodes || [])) {
+	    function buildTreeList(nodes, isRoot = false, depth = 0) {
+	      const ul = document.createElement('ul');
+	      ul.className = isRoot ? 'tree-root tree-explorer' : 'tree-children tree-explorer';
+	      for (const node of (nodes || [])) {
         const li = document.createElement('li');
         li.className = 'node tree-item ' + (node.type === 'folder' ? 'dir' : 'page');
         li.draggable = true;
@@ -1319,22 +1352,25 @@
 
         if ((selectedIds && selectedIds.has(li.dataset.id)) || li.dataset.id === selectedId) li.classList.add('selected');
 
-        const row = document.createElement('div');
-        row.className = 'row tree-row ' + (node.type === 'folder' ? 'kind-dir' : 'kind-file');
-        row.style.paddingLeft = `${8 + depth * 8}px`;
+	        const row = document.createElement('div');
+	        row.className = 'row tree-row ' + (node.type === 'folder' ? 'kind-dir' : 'kind-file');
+	        row.style.paddingLeft = `${8 + depth * 8}px`;
         row.addEventListener('click', (e) => {
           e.stopPropagation();
           if (activeInlineEdit) return;
           selectWithModifiers(li.dataset.id, e);
         });
 
-        const twist = document.createElement('span');
-        twist.className = 'tree-twist';
-        const isFolder = node.type === 'folder';
-        const collapsed = isFolder && treeCollapsed.has(li.dataset.id);
-        const allowedByDepth = (depth + 2) <= maxLevelValue();
-        const canExpand = isFolder && allowedByDepth;
-        twist.textContent = isFolder ? (collapsed ? '▸' : '▾') : '';
+	        const left = document.createElement('div');
+	        left.className = 'row-left';
+
+	        const twist = document.createElement('span');
+	        twist.className = 'tree-twist';
+	        const isFolder = node.type === 'folder';
+	        const collapsed = isFolder && treeCollapsed.has(li.dataset.id);
+	        const allowedByDepth = (depth + 2) <= maxLevelValue();
+	        const canExpand = isFolder && allowedByDepth;
+	        twist.textContent = isFolder ? (collapsed ? '▸' : '▾') : '';
         twist.addEventListener('click', (e) => {
           e.stopPropagation();
           if (!isFolder) return;
@@ -1344,26 +1380,66 @@
           }
           toggleTreeDir(li.dataset.id);
         });
-        row.appendChild(twist);
+	        left.appendChild(twist);
 
-        const icon = document.createElement('span');
-        icon.className = 'tree-icon';
-        icon.textContent = isFolder ? '📚' : '📝';
-        row.appendChild(icon);
+	        const icon = document.createElement('span');
+	        icon.className = 'tree-icon';
+	        icon.textContent = isFolder ? '📚' : '📝';
+	        left.appendChild(icon);
 
-        const title = document.createElement('span');
-        title.className = 'node-title';
-        title.textContent = displayTitleForNode(node);
-        title.addEventListener('dblclick', (e) => {
-          e.stopPropagation();
-          selectedId = li.dataset.id;
-          beginInlineEdit(li.dataset.id, 'title', title);
-        });
-        row.appendChild(title);
+		        const title = document.createElement('span');
+		        title.className = 'node-title';
+		        title.textContent = node && node.is_overview ? '' : displayTitleForNode(node);
+	        title.addEventListener('dblclick', (e) => {
+	          e.stopPropagation();
+	          selectedId = li.dataset.id;
+	          if (node && node.is_overview) return;
+	          beginInlineEdit(li.dataset.id, 'title', title);
+	        });
+		        left.appendChild(title);
 
-        // Pages show file location; folders don't need to show "path/meta".
-        const meta = document.createElement('span');
-        meta.className = 'node-meta';
+	        row.appendChild(left);
+
+	        // Section overview slot (title-less): inline with section header.
+	        if (isFolder) {
+	          const children = Array.isArray(node.children) ? node.children : [];
+	          const overview = children.find(c => c && c.type === 'page' && c.is_overview) || null;
+	          const slot = document.createElement('div');
+	          slot.className = 'overview-inline';
+	          const label = document.createElement('span');
+	          label.className = 'overview-label';
+	          label.textContent = 'Display';
+	          slot.appendChild(label);
+
+	          const value = document.createElement('span');
+	          value.className = 'overview-value';
+	          slot.appendChild(value);
+
+	          if (overview && overview.file) {
+	            slot.classList.add('has-overview');
+	            value.textContent = `./${String(overview.file).replace(/^\.\//, '')}`;
+	            slot.title = value.textContent;
+	            slot.addEventListener('click', (e) => {
+	              e.stopPropagation();
+	              if (activeInlineEdit) return;
+	              selectNode(overview.id);
+	            });
+	            slot.addEventListener('dblclick', (e) => {
+	              e.stopPropagation();
+	              if (activeInlineEdit) return;
+	              selectedId = overview.id;
+	              beginInlineEdit(overview.id, 'file', value);
+	            });
+	          } else {
+	            slot.classList.add('empty');
+	            value.textContent = '(none)';
+	          }
+	          row.appendChild(slot);
+	        }
+
+	        // Pages show file location; folders don't need to show "path/meta".
+	        const meta = document.createElement('span');
+	        meta.className = 'node-meta';
         if (isFolder) {
           meta.textContent = folderDirForId(li.dataset.id) || (node.segment ? `${node.segment}` : '');
           meta.addEventListener('dblclick', (e) => {
@@ -1384,19 +1460,21 @@
 
         li.appendChild(row);
 
-        li.addEventListener('dragstart', onDragStart);
-        li.addEventListener('dragend', onDragEnd);
+	        li.addEventListener('dragstart', onDragStart);
+		        li.addEventListener('dragend', onDragEnd);
 
-        if (node.type === 'folder') {
-          const children = Array.isArray(node.children) ? node.children : [];
-          const collapsed = treeCollapsed.has(li.dataset.id);
-          if (!collapsed && canExpand) {
-            li.appendChild(buildTreeList(children, false, depth + 1));
-          } else {
-            // Keep an empty children container so folder still shows as a folder
-            // but without large nested blocks.
-            const emptyUl = document.createElement('ul');
-            emptyUl.className = 'tree-children tree-explorer is-collapsed';
+		        if (node.type === 'folder') {
+		          const children = Array.isArray(node.children) ? node.children : [];
+		          // Overview page is rendered in the header slot, not in the list.
+		          const rest = children.filter(c => !(c && c.type === 'page' && c.is_overview));
+		          const collapsed = treeCollapsed.has(li.dataset.id);
+		          if (!collapsed && canExpand) {
+		            li.appendChild(buildTreeList(rest, false, depth + 1));
+		          } else {
+	            // Keep an empty children container so folder still shows as a folder
+	            // but without large nested blocks.
+	            const emptyUl = document.createElement('ul');
+	            emptyUl.className = 'tree-children tree-explorer is-collapsed';
             li.appendChild(emptyUl);
           }
         }
@@ -1455,15 +1533,15 @@
       updateDropHintFromPointer(e.clientX, e.clientY);
     }
 
-    function onTreeDrop(e) {
-      if (!draggedId) return;
-      e.preventDefault();
-      pushDebug('drop.before', { draggedId, dropHint });
-      applyDrop();
-      clearDropVisual();
-      renderTree();
-      scheduleAutoSync('drag.drop');
-    }
+	    function onTreeDrop(e) {
+	      if (!draggedId) return;
+	      e.preventDefault();
+	      pushDebug('drop.before', { draggedId, dropHint });
+	      applyDrop();
+	      clearDropVisual();
+	      renderTree();
+	      scheduleAutoSync('drag.drop', dragMode);
+	    }
 
     function updateDropHintFromPointer(clientX, clientY) {
       const el = document.elementFromPoint(clientX, clientY);
@@ -1583,40 +1661,67 @@
       }
     }
 
-    function moveNodes(ids, targetId, mode) {
-      const list = Array.from(new Set((ids || []).filter(Boolean)));
-      if (!list.length) return;
+	    function moveNodes(ids, targetId, mode) {
+	      const list = Array.from(new Set((ids || []).filter(Boolean)));
+	      if (!list.length) return;
 
-      if (mode === 'root') {
-        const ctxs = detachManyWithContext(list);
-        for (const ctx of ctxs) stateTree.push(ctx.node);
-        return;
-      }
+	      // Overview pages are special:
+	      // - They cannot be swapped/reordered within a section.
+	      // - If moved out of their section, they become normal pages.
+	      const asNodes = list.map(id => {
+	        const found = findNode(stateTree, id);
+	        return found ? found.node : null;
+	      }).filter(Boolean);
 
-      if (mode === 'inside') {
-        const targetInfo = findNode(stateTree, targetId);
-        if (!targetInfo || targetInfo.node.type !== 'folder') return;
-        targetInfo.node.children = Array.isArray(targetInfo.node.children) ? targetInfo.node.children : [];
-        const ctxs = detachManyWithContext(list);
-        for (const ctx of ctxs) targetInfo.node.children.push(ctx.node);
-        return;
-      }
+	      if (mode === 'root') {
+	        const ctxs = detachManyWithContext(list);
+	        for (const ctx of ctxs) {
+	          if (ctx.node && ctx.node.is_overview) ctx.node.is_overview = false;
+	          stateTree.push(ctx.node);
+	        }
+	        return;
+	      }
 
-      if (mode === 'before' || mode === 'after') {
-        // Detach first, then re-find target to get correct index after removal.
-        const ctxs = detachManyWithContext(list);
-        const targetInfo = findNode(stateTree, targetId);
-        if (!targetInfo) return;
-        const siblings = targetInfo.siblings;
-        const idx = siblings.findIndex(n => n.id === targetId);
-        if (idx < 0) return;
-        let insertAt = mode === 'before' ? idx : idx + 1;
-        for (const ctx of ctxs) {
-          siblings.splice(insertAt, 0, ctx.node);
-          insertAt += 1;
-        }
-      }
-    }
+	      if (mode === 'inside') {
+	        const targetInfo = findNode(stateTree, targetId);
+	        if (!targetInfo || targetInfo.node.type !== 'folder') return;
+	        targetInfo.node.children = Array.isArray(targetInfo.node.children) ? targetInfo.node.children : [];
+	        const overviewIdx = targetInfo.node.children.findIndex(n => n && n.type === 'page' && n.is_overview);
+	        const ctxs = detachManyWithContext(list);
+	        for (const ctx of ctxs) {
+	          if (ctx.node && ctx.node.is_overview) ctx.node.is_overview = false;
+	          if (overviewIdx >= 0) targetInfo.node.children.splice(overviewIdx + 1, 0, ctx.node);
+	          else targetInfo.node.children.push(ctx.node);
+	        }
+	        return;
+	      }
+
+	      if (mode === 'before' || mode === 'after') {
+	        // Detach first, then re-find target to get correct index after removal.
+	        const ctxs = detachManyWithContext(list);
+	        const targetInfo = findNode(stateTree, targetId);
+	        if (!targetInfo) return;
+	        const siblings = targetInfo.siblings;
+	        const idx = siblings.findIndex(n => n.id === targetId);
+	        if (idx < 0) return;
+	        let insertAt = mode === 'before' ? idx : idx + 1;
+	        const overviewAt = siblings.findIndex(n => n && n.type === 'page' && n.is_overview);
+	        if (overviewAt >= 0 && insertAt <= overviewAt + 0) {
+	          // Never insert before the overview slot.
+	          insertAt = overviewAt + 1;
+	        }
+	        for (const ctx of ctxs) {
+	          if (ctx.node && ctx.node.is_overview) {
+	            // Prevent reordering overview within the same siblings list.
+	            // If it was detached, re-insert it at its original slot (front).
+	            siblings.splice(0, 0, ctx.node);
+	            continue;
+	          }
+	          siblings.splice(insertAt, 0, ctx.node);
+	          insertAt += 1;
+	        }
+	      }
+	    }
 
     function isDescendant(dragId, targetId) {
       const drag = findNode(stateTree, dragId);
@@ -1784,9 +1889,9 @@
       dropLineEl.style.display = 'block';
     }
 
-    async function createNode(type) {
-      const title = prompt(type === 'folder' ? 'Section title:' : 'Page title:');
-      if (!title || !title.trim()) return;
+	    async function createNode(type) {
+	      const title = prompt(type === 'folder' ? 'Section title:' : 'Page title:');
+	      if (!title || !title.trim()) return;
 
       const parentDir = (() => {
         if (!selectedId) return '';
@@ -1822,23 +1927,48 @@
       renderTree();
       updateHistoryButtons();
 
-      // Create on disk immediately.
-      if (type === 'folder') {
-        try {
-          const data = await fetchJson('/api/create_section', {
+	      // Create on disk immediately.
+	      if (type === 'folder') {
+	        try {
+	          const data = await fetchJson('/api/create_section', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ title: title.trim(), parent_dir: parentDir })
           });
-          const found = findNode(stateTree, newId);
-          if (found && found.node && found.node.type === 'folder') {
-            found.node.segment = data.segment || found.node.segment || '';
-          }
-          renderTree();
-          await loadSource();
-          setStatus('Section created on disk.', 'success');
-          scheduleAutoSync('create.section');
-        } catch (e) {
+	          const found = findNode(stateTree, newId);
+	          if (found && found.node && found.node.type === 'folder') {
+	            found.node.segment = data.segment || found.node.segment || '';
+	          }
+	          // Create default section README (overview) as the first page under this folder.
+	          const newFolderDir = folderDirForId(newId);
+	          const pageId = crypto && crypto.randomUUID ? crypto.randomUUID().replace(/-/g, '') : String(Date.now() + 1);
+	          withHistory('create.section_overview', () => {
+	            const info = findNode(stateTree, newId);
+	            if (!info || !info.node || info.node.type !== 'folder') return;
+	            info.node.children = Array.isArray(info.node.children) ? info.node.children : [];
+	            info.node.children.unshift({ id: pageId, type: 'page', title: '', is_overview: true, file: null, file_prev: null, segment: null, children: [] });
+	          });
+	          renderTree();
+	          updateHistoryButtons();
+	          try {
+	            const pageData = await fetchJson('/api/create_page', {
+	              method: 'POST',
+	              headers: { 'Content-Type': 'application/json' },
+	              body: JSON.stringify({ title: 'Overview', parent_dir: newFolderDir, basename: 'README.md' })
+	            });
+	            const pageFound = findNode(stateTree, pageId);
+	            if (pageFound && pageFound.node && pageFound.node.type === 'page') {
+	              pageFound.node.file = pageData.file || pageFound.node.file;
+	              pageFound.node.file_prev = null;
+	            }
+	          } catch (e) {
+	            pushDebug('create.section_overview.failed', { error: e.message || String(e) });
+	          }
+	          renderTree();
+	          await loadSource();
+	          setStatus('Section created on disk.', 'success');
+	          scheduleAutoSync('create.section');
+	        } catch (e) {
           setStatus(e.message || 'Create section failed.', 'error');
         }
         return;
@@ -2118,29 +2248,37 @@
       if (hasFiles || hasDirs) scheduleAutoSync('delete.disk');
     }
 
-    function classifyFoldersForDelete(ids) {
-      const blocking = [];
-      const emptyDirs = [];
-      const seenDirs = new Set();
+	    function classifyFoldersForDelete(ids) {
+	      const blocking = [];
+	      const emptyDirs = [];
+	      const seenDirs = new Set();
 
-      function hasAnyPage(node) {
-        if (!node) return false;
-        if (node.type === 'page') return true;
-        for (const c of (node.children || [])) {
-          if (hasAnyPage(c)) return true;
-        }
-        return false;
-      }
+	      function hasNonOverviewPage(folder) {
+	        if (!folder || folder.type !== 'folder') return false;
+	        const children = Array.isArray(folder.children) ? folder.children : [];
+	        const overview = children.find(c => c && c.type === 'page' && c.is_overview) || null;
+	        for (const c of children) {
+	          if (!c) continue;
+	          if (c.type === 'page') {
+	            if (overview && c === overview) continue;
+	            return true;
+	          }
+	          if (c.type === 'folder') {
+	            if (hasNonOverviewPage(c)) return true;
+	          }
+	        }
+	        return false;
+	      }
 
-      for (const id of (ids || [])) {
-        const found = findNode(stateTree, id);
-        if (!found || !found.node) continue;
-        if (found.node.type !== 'folder') continue;
-        if (hasAnyPage(found.node)) {
-          blocking.push({ id, title: found.node.title || id });
-          continue;
-        }
-        const dir = folderDirForId(id);
+	      for (const id of (ids || [])) {
+	        const found = findNode(stateTree, id);
+	        if (!found || !found.node) continue;
+	        if (found.node.type !== 'folder') continue;
+	        if (hasNonOverviewPage(found.node)) {
+	          blocking.push({ id, title: found.node.title || id });
+	          continue;
+	        }
+	        const dir = folderDirForId(id);
         if (dir && !seenDirs.has(dir)) {
           seenDirs.add(dir);
           emptyDirs.push(dir);

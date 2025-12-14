@@ -262,6 +262,87 @@ body.theme-light .card {
   justify-content: flex-end;
 }
 
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  user-select: none;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.switch-track {
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(232, 238, 252, 0.14);
+  position: relative;
+  flex: 0 0 auto;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.switch-track::after {
+  content: "";
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(232, 238, 252, 0.92);
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.25);
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+
+.switch input:checked + .switch-track {
+  background: rgba(106, 169, 255, 0.28);
+  border-color: rgba(106, 169, 255, 0.35);
+}
+
+.switch input:checked + .switch-track::after {
+  transform: translateX(20px);
+  background: rgba(232, 238, 252, 0.95);
+}
+
+.switch-text {
+  font-size: 12px;
+  font-weight: 650;
+  color: rgba(232, 238, 252, 0.85);
+  letter-spacing: 0.15px;
+}
+
+body.theme-light .switch {
+  background: rgba(11, 18, 32, 0.02);
+}
+
+body.theme-light .switch-track {
+  background: rgba(11, 18, 32, 0.06);
+  border-color: rgba(11, 18, 32, 0.14);
+}
+
+body.theme-light .switch-track::after {
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 18px rgba(11, 18, 32, 0.18);
+}
+
+body.theme-light .switch input:checked + .switch-track {
+  background: rgba(47, 111, 255, 0.18);
+  border-color: rgba(47, 111, 255, 0.24);
+}
+
+body.theme-light .switch-text {
+  color: rgba(11, 18, 32, 0.82);
+}
+
 .inline-actions button {
   padding: 7px 9px;
   border-radius: 10px;
@@ -760,6 +841,77 @@ ul {
   border-radius: 10px;
 }
 
+.row-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+
+.overview-inline {
+  height: 24px;
+  min-width: 140px;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 10px;
+  border: 1px dashed rgba(232, 238, 252, 0.18);
+  background: rgba(255, 255, 255, 0.02);
+  color: rgba(232, 238, 252, 0.55);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  opacity: 0.85;
+  margin-right: 10px;
+}
+
+.overview-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-inline.has-overview {
+  border-style: solid;
+  border-color: rgba(106, 169, 255, 0.20);
+  background: rgba(106, 169, 255, 0.04);
+  color: rgba(232, 238, 252, 0.78);
+  cursor: pointer;
+}
+
+.overview-inline.has-overview:hover {
+  border-color: rgba(106, 169, 255, 0.32);
+  background: rgba(106, 169, 255, 0.06);
+}
+
+body.theme-light .overview-inline {
+  border-color: rgba(11, 18, 32, 0.18);
+  background: rgba(11, 18, 32, 0.02);
+  color: rgba(11, 18, 32, 0.55);
+}
+
+body.theme-light .overview-inline.has-overview {
+  border-color: rgba(47, 111, 255, 0.22);
+  background: rgba(47, 111, 255, 0.06);
+  color: rgba(11, 18, 32, 0.78);
+}
+
+#tree .node.dir>.row {
+  gap: 12px;
+}
+
 .node.dir>.row {
   background: rgba(106, 169, 255, 0.045);
 }
@@ -789,6 +941,41 @@ ul {
   background: transparent;
   border-radius: 12px;
   border-left: 1px solid rgba(232, 238, 252, 0.10);
+}
+
+#tree .node.dir .overview-list {
+  margin-top: 0;
+}
+
+#tree .node.dir .overview-list .node.page > .row {
+  border-color: rgba(106, 169, 255, 0.18);
+  background: rgba(106, 169, 255, 0.04);
+}
+
+body.theme-light #tree .node.dir .overview-list .node.page > .row {
+  border-color: rgba(47, 111, 255, 0.22);
+  background: rgba(47, 111, 255, 0.06);
+}
+
+.overview-slot {
+  margin: 6px 0 0 0;
+  padding: 0 0 0 12px;
+}
+
+.overview-empty {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 10px;
+  color: var(--muted);
+  border: 1px dashed rgba(232, 238, 252, 0.18);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+body.theme-light .overview-empty {
+  border-color: rgba(11, 18, 32, 0.18);
+  background: rgba(11, 18, 32, 0.02);
 }
 
 #tree .node.dir>ul::before {

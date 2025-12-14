@@ -1,11 +1,16 @@
 site_name: MkDocs Nav Manager
 nav:
-- Home: index.md
-- Section 1:
-  - Overview: section1/index.md
-  - Page 1: section1/page1.md
-  - Page 2: section1/page2.md
-- Section 2:
-  - Overview: section2/index.md
-  - Page A: section2/page-a.md
-- Section 3: index-4.md
+  - Home:
+    - home/index.md
+    - ss: home/ss.md
+  - Section 1:
+    - section1/index.md
+    - Page 2: section1/page2.md
+    - subsection:
+      - section1/subsection/page3.md
+    - Page 1: section1/page1.md
+  - Section 2:
+    - section2/i.md
+    - Section 3: section2/index2.md
+    - Page A: section2/page.md
+    - aa: section2/aa.md
