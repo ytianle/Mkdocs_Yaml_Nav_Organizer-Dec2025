@@ -48,6 +48,8 @@
 	            <div class="tools-buttons">
 	              <button id="tool-import" type="button" class="ghost"
 	                data-help="Rebuild Doc Tree from mkdocs.yml nav (overwrites current draft)">📥 Load mkdocs.yml</button>
+	              <button id="tool-beautify-nav" type="button" class="ghost"
+	                data-help="Beautify mkdocs.yml nav formatting (nav block only; no file moves)">🧼 Beautify nav</button>
 	              <span class="sr-only" data-help="All edits auto-sync mkdocs.yml + files"></span>
 	              <button id="tool-debug" type="button" class="ghost" data-help="Toggle debug window (DnD logs)">🧪
 	                Debug</button>
@@ -199,6 +201,7 @@
         toolUndoBtn: document.getElementById('tool-undo'),
 	        toolRedoBtn: document.getElementById('tool-redo'),
 		        toolImportBtn: document.getElementById('tool-import'),
+		        toolBeautifyNavBtn: document.getElementById('tool-beautify-nav'),
 		        dragModeToggle: document.getElementById('drag-mode-toggle'),
 		        dragModeSwitch: document.getElementById('drag-mode-switch'),
 		        dragModeText: document.getElementById('drag-mode-text'),
@@ -219,6 +222,7 @@
       };
 
 		      els.toolImportBtn.addEventListener('click', () => importFromMkdocs({ confirm: true }));
+		      if (els.toolBeautifyNavBtn) els.toolBeautifyNavBtn.addEventListener('click', beautifyNav);
 
       els.newFolderBtn.addEventListener('click', () => createNode('folder'));
       els.newPageBtn.addEventListener('click', () => createNode('page'));
@@ -426,6 +430,10 @@
 	        pushDebug('auto_sync.run', { mode, reason });
 	        await sync(mode, { confirm: false, silent: true });
 	      }, 250);
+	    }
+
+	    function scheduleNavOnly(reason) {
+	      return scheduleAutoSync(reason, 'nav_only');
 	    }
 
     function showToolTip(text, e) {
@@ -984,6 +992,12 @@
 	        }
 	        setStatus(e.message || 'Import failed.', 'error');
 	      }
+	    }
+
+	    async function beautifyNav() {
+	      setStatus('Beautifying nav...', 'info');
+	      pushDebug('beautify.nav', {});
+	      await sync('nav_only', { confirm: false, silent: false });
 	    }
 
 	    function showImportErrors(payload) {
@@ -1607,7 +1621,47 @@
 	      applyDrop();
 	      clearDropVisual();
 	      renderTree();
-	      scheduleAutoSync('drag.drop', dragMode);
+	      if (dragMode === 'nav_only') {
+	        scheduleNavOnly('drag.drop.nav_only');
+	      } else {
+	        scheduleDragFilesSync('drag.drop.files');
+	      }
+	    }
+
+	    function collectDraggedIdsForSync() {
+	      const ids = (draggedIds && draggedIds.length) ? draggedIds : (draggedId ? [draggedId] : []);
+	      return Array.from(new Set((ids || []).filter(Boolean)));
+	    }
+
+	    async function scheduleDragFilesSync(reason) {
+	      if (autoSyncTimer) clearTimeout(autoSyncTimer);
+	      const movedIds = collectDraggedIdsForSync();
+	      autoSyncTimer = setTimeout(async () => {
+	        autoSyncTimer = null;
+	        pushDebug('auto_sync.run', { mode: 'drag_files', reason, movedIds });
+	        setStatus('Syncing drag...', 'info');
+	        try {
+	          const data = await fetchJson('/api/sync_drag_files', {
+	            method: 'POST',
+	            headers: { 'Content-Type': 'application/json' },
+	            body: JSON.stringify({ tree: stateTree, moved_ids: movedIds })
+	          });
+	          const moves = Array.isArray(data.moves) ? data.moves : [];
+	          setStatus(`Drag synced.${moves.length ? ` moved:${moves.length}` : ''}`, 'success');
+	          await loadState({ reset: false });
+	          await loadSource();
+	        } catch (e) {
+	          const data = e && e.data ? e.data : null;
+	          if (data && Array.isArray(data.collisions) && data.collisions.length) {
+	            setStatus(`Drag blocked: file conflict (${data.collisions.length}). No changes applied.`, 'error');
+	            pushDebug('drag.sync.blocked', { collisions: data.collisions });
+	            await loadState({ reset: true });
+	            await loadSource();
+	            return;
+	          }
+	          setStatus(e.message || 'Drag sync failed.', 'error');
+	        }
+	      }, 250);
 	    }
 
     function updateDropHintFromPointer(clientX, clientY) {
@@ -2044,7 +2098,7 @@
 	          renderTree();
 	          await loadSource();
 	          setStatus('Section created on disk.', 'success');
-	          scheduleAutoSync('create.section');
+	          scheduleNavOnly('create.section');
 	        } catch (e) {
           setStatus(e.message || 'Create section failed.', 'error');
         }
@@ -2068,7 +2122,7 @@
 	        renderTree();
 	        await loadSource();
 	        setStatus(creatingDisplay ? 'Display page created.' : 'Page created on disk.', 'success');
-	        scheduleAutoSync(creatingDisplay ? 'create.display' : 'create.page');
+	        scheduleNavOnly(creatingDisplay ? 'create.display' : 'create.page');
 	      } catch (e) {
 	        setStatus(e.message || 'Create page failed.', 'error');
 	      }
@@ -2155,7 +2209,7 @@
           renderTree();
           updateHistoryButtons();
           setStatus('Renamed.', 'success');
-          scheduleAutoSync('rename.title');
+          scheduleNavOnly('rename.title');
           return;
         }
 
@@ -2186,7 +2240,7 @@
               updateHistoryButtons();
               await loadSource();
               setStatus('Folder renamed on disk.', 'success');
-              scheduleAutoSync('rename.segment');
+              scheduleNavOnly('rename.segment');
             } catch (e) {
               setStatus(e.message || 'Rename folder failed.', 'error');
               renderTree();
@@ -2225,7 +2279,7 @@
               updateHistoryButtons();
               await loadSource();
               setStatus('File renamed on disk.', 'success');
-              scheduleAutoSync('rename.file');
+              scheduleNavOnly('rename.file');
             } catch (e) {
               setStatus(e.message || 'Rename file failed.', 'error');
               renderTree();
@@ -2321,11 +2375,11 @@
       renderTree();
       updateHistoryButtons();
       setStatus(removed ? `Deleted ${removed.count || 1}.` : 'Not found.', removed ? 'success' : 'info');
-      scheduleAutoSync('delete.tree');
+      scheduleNavOnly('delete.tree');
 
       if (hasFiles) await deleteFilesOnDisk(filesToDelete, { deleteAssets: true });
       if (hasDirs) await deleteDirsOnDisk(dirsToDelete);
-      if (hasFiles || hasDirs) scheduleAutoSync('delete.disk');
+      if (hasFiles || hasDirs) scheduleNavOnly('delete.disk');
     }
 
 	    function classifyFoldersForDelete(ids) {

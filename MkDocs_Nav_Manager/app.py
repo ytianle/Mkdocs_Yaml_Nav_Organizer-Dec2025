@@ -29,6 +29,8 @@ yaml = YAML()
 yaml.preserve_quotes = True
 # mkdocs.yml style: keep nav and nested blocks compact with 2-space indentation.
 yaml.indent(mapping=2, sequence=2, offset=2)
+# Avoid line wrapping that can split `Key: value` into two lines.
+yaml.width = 4096
 
 ALLOWED_DOC_EXTS = {".md", ".markdown", ".mdx"}
 
@@ -122,6 +124,67 @@ def _save_mkdocs_config(mkdocs: Path, config: CommentedMap) -> Path | None:
     mkdocs.parent.mkdir(parents=True, exist_ok=True)
     with mkdocs.open("w", encoding="utf-8") as handle:
         yaml.dump(config, handle)
+    return backup
+
+
+def _dump_nav_block(nav_value: Any) -> str:
+    """Dump a standalone `nav:` block with 2-space indentation."""
+    tmp = CommentedMap()
+    tmp["nav"] = nav_value if nav_value is not None else CommentedSeq()
+    buf = []
+    # ruamel needs a stream-like object; implement minimal write collector
+    class _W:
+        def write(self, s: str):
+            if isinstance(s, (bytes, bytearray)):
+                buf.append(s.decode("utf-8", errors="replace"))
+            else:
+                buf.append(str(s))
+
+    yaml.dump(tmp, _W())
+    text = "".join(buf)
+    # Ensure trailing newline for file splicing.
+    if text and not text.endswith("\n"):
+        text += "\n"
+    return text
+
+
+def _write_mkdocs_nav_only(mkdocs: Path, nav_value: Any) -> Path | None:
+    """Replace only the root-level `nav:` block in mkdocs.yml, leaving the rest untouched."""
+    backup = _backup_file(mkdocs)
+    mkdocs.parent.mkdir(parents=True, exist_ok=True)
+    original = mkdocs.read_text(encoding="utf-8") if mkdocs.exists() else ""
+    lines = original.splitlines(keepends=True)
+
+    start = None
+    for i, line in enumerate(lines):
+        if line.startswith("nav:") and (len(line) == 4 or line[4].isspace()):
+            start = i
+            break
+
+    nav_block = _dump_nav_block(nav_value)
+    nav_lines = nav_block.splitlines(keepends=True)
+
+    if start is None:
+        # No existing nav: append at end with a separating newline if needed.
+        if original and not original.endswith("\n"):
+            original += "\n"
+        if original and not original.endswith("\n\n"):
+            original += "\n"
+        mkdocs.write_text(original + nav_block, encoding="utf-8")
+        return backup
+
+    # Find the end of the nav block: next top-level key (no indent) that looks like "key:".
+    end = len(lines)
+    for j in range(start + 1, len(lines)):
+        l = lines[j]
+        if not l.strip():
+            continue
+        if not l.startswith((" ", "\t", "-")) and ":" in l:
+            end = j
+            break
+
+    new_lines = lines[:start] + nav_lines + lines[end:]
+    mkdocs.write_text("".join(new_lines), encoding="utf-8")
     return backup
 
 
@@ -398,7 +461,15 @@ def _tree_to_mkdocs_nav(nodes: Iterable[Node], depth: int = 0) -> CommentedSeq:
             rest = [c for c in children if c is not overview]
 
             # If this is a top-level section with only a display page, serialize as "Title: path".
+            # Exception: if the display page lives under `blog/`, keep the list form to avoid
+            # collapsing `- Section: [blog/index.md]` into `- Section: blog/index.md`.
             if depth == 0 and overview and not rest:
+                overview_rel = _safe_rel_path(overview.file)
+                if overview_rel.startswith("blog/"):
+                    seq = CommentedSeq()
+                    seq.append(overview_rel)
+                    nav.append(CommentedMap({title: seq}))
+                    continue
                 nav.append(CommentedMap({title: _safe_rel_path(overview.file)}))
                 continue
 
@@ -673,6 +744,73 @@ def _apply_moves(moves: list[tuple[Path, Path]]) -> list[dict[str, str]]:
         applied.append({"from": src.relative_to(DOCS_ROOT).as_posix(), "to": dst.relative_to(DOCS_ROOT).as_posix()})
     _cleanup_empty_dirs(sources, DOCS_ROOT)
     return applied
+
+
+def _collect_pages_under(nodes: Iterable[Node]) -> list[Node]:
+    out: list[Node] = []
+    for n in nodes:
+        if n.type == "page":
+            out.append(n)
+        elif n.type == "folder":
+            out.extend(_collect_pages_under(n.children or []))
+    return out
+
+
+def _plan_partial_sync(nodes: list[Node], moved_ids: set[str]) -> tuple[list[tuple[Path, Path]], list[tuple[Path, Path]], list[dict[str, Any]]]:
+    """Plan moves only for pages under moved nodes (folders/pages)."""
+    page_moves: list[tuple[Path, Path]] = []
+    asset_moves: list[tuple[Path, Path]] = []
+    collisions: list[dict[str, Any]] = []
+
+    def walk(items: list[Node], ancestors: list[Node], under_moved: bool):
+        folder_dir = _compute_folder_dir(ancestors)
+        for node in items:
+            is_under = under_moved or (node.id in moved_ids)
+            if node.type == "folder":
+                walk(node.children or [], ancestors + [node], is_under)
+                continue
+            if not is_under:
+                continue
+            if not node.file:
+                continue
+            basename = Path(node.file).name
+            desired_rel = f"{folder_dir}/{basename}" if folder_dir else basename
+            desired_rel = _safe_rel_path(desired_rel)
+            current_rel = _safe_rel_path(node.file_prev) if node.file_prev else _safe_rel_path(node.file)
+            src = DOCS_ROOT / current_rel
+            dst = DOCS_ROOT / desired_rel
+
+            if not src.exists():
+                continue
+
+            if src.resolve() == dst.resolve():
+                node.file = desired_rel
+                node.file_prev = None
+                continue
+
+            # Conflict check: block if destination exists and is not also a planned source.
+            if dst.exists() and dst.resolve() != src.resolve():
+                collisions.append({"type": "exists", "target": desired_rel, "title": node.title})
+                continue
+
+            page_moves.append((src, dst))
+            src_assets = src.with_suffix("")
+            dst_assets = dst.with_suffix("")
+            if src_assets.exists() and src_assets.is_dir():
+                if dst_assets.exists() and dst_assets.resolve() != src_assets.resolve():
+                    collisions.append({"type": "exists", "target": dst_assets.relative_to(DOCS_ROOT).as_posix(), "title": node.title})
+                    continue
+                asset_moves.append((src_assets, dst_assets))
+            node.file = desired_rel
+            node.file_prev = None
+
+    walk(nodes, [], False)
+
+    if collisions:
+        return [], [], collisions
+
+    _ensure_unique_targets(page_moves + asset_moves)
+    return page_moves, asset_moves, []
 
 
 def _create_missing_page(file_rel: str, title: str) -> None:
@@ -1111,16 +1249,12 @@ def api_sync():
         _cleanup_stray_empty_dirs(DOCS_ROOT, keep_rel_dirs=desired_dirs)
         # Do not persist state until after mkdocs.yml is written successfully.
 
-    # Always write mkdocs.yml nav from current state (nav_only uses existing page.file)
+    # Always write mkdocs.yml nav from current state, but only replace the nav block.
+    nav_value = _tree_to_mkdocs_nav(nodes)
     try:
-        config = _load_mkdocs_config(MKDOCS_PATH)
+        backup = _write_mkdocs_nav_only(MKDOCS_PATH, nav_value)
     except Exception as exc:
-        return _json_error(f"Failed to read mkdocs.yml: {exc}", 500)
-    config["nav"] = _tree_to_mkdocs_nav(nodes)
-    try:
-        backup = _save_mkdocs_config(MKDOCS_PATH, config)
-    except Exception as exc:
-        return _json_error(f"Failed to write mkdocs.yml: {exc}", 500)
+        return _json_error(f"Failed to write mkdocs.yml nav: {exc}", 500)
 
     # Only persist state after mkdocs write succeeds.
     _save_state(nodes)
@@ -1134,6 +1268,51 @@ def api_sync():
             "backup": str(backup) if backup else None,
         }
     )
+
+
+@app.route("/api/sync_drag_files", methods=["POST"])
+def api_sync_drag_files():
+    """Incremental sync for drag operations: move only dragged pages/folders on disk, then write nav."""
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return _json_error("Expected a JSON object.", 400)
+    tree_raw = payload.get("tree")
+    moved_ids_raw = payload.get("moved_ids")
+    if not isinstance(tree_raw, list):
+        return _json_error("Expected `tree` to be a JSON list.", 400)
+    if not isinstance(moved_ids_raw, list) or not all(isinstance(x, str) for x in moved_ids_raw):
+        return _json_error("Expected `moved_ids` to be a JSON list of strings.", 400)
+
+    try:
+        nodes = [_node_from_dict(item) for item in tree_raw]
+    except Exception as exc:
+        return _json_error(f"Invalid tree: {exc}", 400)
+
+    moved_ids = {x for x in moved_ids_raw if x}
+    page_moves, asset_moves, collisions = _plan_partial_sync(nodes, moved_ids)
+    if collisions:
+        return _json_error("File move blocked: target already exists.", 409, collisions=collisions)
+
+    moves_applied: list[dict[str, str]] = []
+    try:
+        moves_applied.extend(_apply_moves(page_moves))
+        moves_applied.extend(_apply_moves(asset_moves))
+    except (FileNotFoundError, FileExistsError) as exc:
+        return _json_error(f"File move failed: {exc}", 400)
+    except Exception as exc:
+        return _json_error(f"File move failed: {exc}", 500)
+
+    desired_dirs = _collect_desired_folder_dirs(nodes)
+    _ensure_desired_folder_dirs_exist(desired_dirs)
+
+    nav_value = _tree_to_mkdocs_nav(nodes)
+    try:
+        backup = _write_mkdocs_nav_only(MKDOCS_PATH, nav_value)
+    except Exception as exc:
+        return _json_error(f"Failed to write mkdocs.yml nav: {exc}", 500)
+
+    _save_state(nodes)
+    return jsonify({"status": "ok", "moves": moves_applied, "backup": str(backup) if backup else None})
 
 
 if __name__ == "__main__":
