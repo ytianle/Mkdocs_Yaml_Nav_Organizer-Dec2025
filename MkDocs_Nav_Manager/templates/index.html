@@ -117,6 +117,7 @@
               <summary class="info-summary">More</summary>
               <div id="info-meta" class="info-line"></div>
               <div id="info-selection" class="info-line"></div>
+              <div id="info-errors" class="info-errors" hidden></div>
             </details>
             <div id="info-hover" class="info-hint" hidden></div>
           </div>
@@ -185,11 +186,12 @@
         panelInfo: document.getElementById('panel-info'),
         bottomStack: document.getElementById('bottom-stack'),
         infoMeta: document.getElementById('info-meta'),
-        infoMetaPill: document.getElementById('info-meta-pill'),
+	        infoMetaPill: document.getElementById('info-meta-pill'),
         infoHover: document.getElementById('info-hover'),
         infoSelection: document.getElementById('info-selection'),
-        infoSelectionPill: document.getElementById('info-selection-pill'),
-        infoDetails: document.getElementById('info-details'),
+	        infoSelectionPill: document.getElementById('info-selection-pill'),
+	        infoDetails: document.getElementById('info-details'),
+	        infoErrors: document.getElementById('info-errors'),
         sourceViewBtn: document.getElementById('source-view-btn'),
         newFolderBtn: document.getElementById('new-folder-btn'),
         newPageBtn: document.getElementById('new-page-btn'),
@@ -343,8 +345,9 @@
 		        const data = e && e.data ? e.data : null;
 		        if (data && Array.isArray(data.errors)) {
 		          const count = data.errors.length;
-		          setStatus(`Import blocked: ${count} illegal doc path(s).`, 'error');
+		          setStatus(`Import blocked: ${count} invalid/missing doc path(s).`, 'error');
 		          pushDebug('import.blocked', { errors: data.errors });
+		          showImportErrors(data);
 		          if (els.tree) els.tree.textContent = 'Blocked: invalid mkdocs.yml paths.';
 		          if (els.source) els.source.textContent = 'Blocked.';
 		          clearSelection();
@@ -974,12 +977,42 @@
 	      } catch (e) {
 	        const data = e && e.data ? e.data : null;
 	        if (data && Array.isArray(data.errors)) {
-	          setStatus(`Import blocked: ${data.errors.length} illegal doc path(s).`, 'error');
+	          setStatus(`Import blocked: ${data.errors.length} invalid/missing doc path(s).`, 'error');
 	          pushDebug('import.blocked', { errors: data.errors });
+	          showImportErrors(data);
 	          return;
 	        }
 	        setStatus(e.message || 'Import failed.', 'error');
 	      }
+	    }
+
+	    function showImportErrors(payload) {
+	      if (!els.infoErrors || !els.infoDetails) return;
+	      const lines = Array.isArray(payload && payload.lines) ? payload.lines : [];
+	      const errors = Array.isArray(payload && payload.errors) ? payload.errors : [];
+	      const parts = [];
+	      parts.push(`mkdocs.yml import blocked (${errors.length})`);
+	      for (const err of errors) {
+	        if (!err) continue;
+	        const kind = err.type || 'error';
+	        const file = err.file ? ` file=${err.file}` : '';
+	        const path = err.path ? ` path=${err.path}` : '';
+	        const msg = err.error ? ` error=${err.error}` : '';
+	        parts.push(`- ${kind}${file}${path}${msg}`);
+	      }
+	      if (lines.length) {
+	        parts.push('');
+	        parts.push('Matched mkdocs.yml lines:');
+	        for (const l of lines) {
+	          if (!l) continue;
+	          const no = (l.no != null) ? String(l.no) : '';
+	          const text = (l.text || '').trimEnd();
+	          parts.push(`${no.padStart(4, ' ')} | ${text}`);
+	        }
+	      }
+	      els.infoErrors.hidden = false;
+	      els.infoErrors.textContent = parts.join('\n');
+	      els.infoDetails.open = true;
 	    }
 
     async function sync(mode, options) {

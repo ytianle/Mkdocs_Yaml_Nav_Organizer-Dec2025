@@ -218,7 +218,7 @@ button:active {
 }
 
 .bottom-stack.debug-hidden {
-  grid-template-rows: auto 0px 0px;
+  grid-template-rows: minmax(0, 1fr) 0px 0px;
 }
 
 .panel {
@@ -598,8 +598,10 @@ body.is-resizing .splitter-h * {
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
-  overflow: hidden;
-  flex: 0 0 auto;
+  overflow: auto;
+  max-height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .info-pills {
@@ -654,6 +656,25 @@ body.is-resizing .splitter-h * {
   text-overflow: ellipsis;
 }
 
+.info-errors {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 107, 107, 0.22);
+  background: rgba(255, 107, 107, 0.06);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+  overflow: auto;
+  max-height: 240px;
+}
+
+body.theme-light .info-errors {
+  border-color: rgba(216, 59, 59, 0.28);
+  background: rgba(216, 59, 59, 0.08);
+}
+
 .info-hint {
   padding: 8px 10px;
   border-radius: 12px;
@@ -669,8 +690,9 @@ body.is-resizing .splitter-h * {
 
 #panel-info .list-shell {
   padding: 0;
-  overflow: visible;
-  flex: 0 0 auto;
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 #panel-source,

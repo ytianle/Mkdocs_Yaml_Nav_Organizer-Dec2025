@@ -695,7 +695,7 @@ def _validate_imported_tree(nodes: list["Node"]) -> tuple[list[dict[str, Any]], 
                 continue
             file_rel = (node.file or "").strip()
             if not file_rel:
-                warnings.append(
+                errors.append(
                     {
                         "type": "missing_file_field",
                         "title": node.title,
@@ -729,7 +729,7 @@ def _validate_imported_tree(nodes: list["Node"]) -> tuple[list[dict[str, Any]], 
                 continue
 
             if not abs_path.exists() or not abs_path.is_file():
-                warnings.append(
+                errors.append(
                     {
                         "type": "missing_file",
                         "file": file_rel,
@@ -1040,7 +1040,28 @@ def api_import():
     _ensure_section_overviews_in_place(nodes)
     errors, warnings = _validate_imported_tree(nodes)
     if errors:
-        return _json_error("Import blocked: mkdocs.yml contains illegal doc paths.", 409, errors=errors)
+        # Best-effort: show the offending mkdocs.yml lines to help users fix quickly.
+        lines: list[dict[str, Any]] = []
+        try:
+            raw_lines = MKDOCS_PATH.read_text(encoding="utf-8").splitlines()
+            needles = []
+            for err in errors:
+                if isinstance(err, dict) and isinstance(err.get("file"), str) and err["file"].strip():
+                    needles.append(err["file"].strip())
+            needles = list(dict.fromkeys(needles))
+            for i, line in enumerate(raw_lines, start=1):
+                for needle in needles:
+                    if needle in line:
+                        lines.append({"no": i, "text": line})
+                        break
+        except Exception:
+            lines = []
+        return _json_error(
+            "Import blocked: mkdocs.yml contains illegal doc paths.",
+            409,
+            errors=errors,
+            lines=lines,
+        )
     _save_state(nodes)
     return jsonify({"status": "ok", "tree": [n.to_dict() for n in nodes], "warnings": warnings})
 
