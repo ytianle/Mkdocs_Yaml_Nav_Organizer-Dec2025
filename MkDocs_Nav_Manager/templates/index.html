@@ -27,38 +27,22 @@
 
     <div id="tool-tooltip" class="tool-tooltip" hidden></div>
 
+    <section class="dock-tools tools-toolbar" id="panel-tools">
+      <div class="tools-bar" role="toolbar" aria-label="Tools">
+        <button id="tool-undo" type="button" class="ghost icon-button" data-help="Undo last change"
+          aria-label="Undo">⏪</button>
+        <button id="tool-redo" type="button" class="ghost icon-button" data-help="Redo last undone change"
+          aria-label="Redo">⏩</button>
+        <button id="tool-import" type="button" class="ghost icon-button"
+          data-help="Rebuild Doc Tree from mkdocs.yml nav (overwrites current draft)" aria-label="Load mkdocs.yml">📥</button>
+        <button id="tool-beautify-nav" type="button" class="ghost icon-button"
+          data-help="Beautify mkdocs.yml nav formatting (nav block only; no file moves)" aria-label="Beautify nav">🧼</button>
+        <button id="tool-debug" type="button" class="ghost icon-button"
+          data-help="Toggle debug window (DnD logs)" aria-label="Toggle debug">🧪</button>
+      </div>
+    </section>
+
     <div id="workspace" class="workspace">
-      <section class="card panel dock-tools" id="panel-tools">
-        <div class="card-head">
-          <h2>🛠 Tools</h2>
-          <span class="muted">Hover for hints</span>
-        </div>
-        <div class="list-shell tools-body tools-dock-body">
-          <div class="tools-group">
-            <div class="tools-title">🧩 Draft & History</div>
-            <div class="tools-buttons">
-              <button id="tool-undo" type="button" class="ghost" data-help="Undo last change">⏪ Undo</button>
-              <button id="tool-redo" type="button" class="ghost" data-help="Redo last undone change">⏩ Redo</button>
-            </div>
-          </div>
-
-          <div class="splitter splitter-v splitter-tools" id="split-tools" title="Drag to resize tools"></div>
-
-	          <div class="tools-group">
-	            <div class="tools-title">🚀 Main</div>
-	            <div class="tools-buttons">
-	              <button id="tool-import" type="button" class="ghost"
-	                data-help="Rebuild Doc Tree from mkdocs.yml nav (overwrites current draft)">📥 Load mkdocs.yml</button>
-	              <button id="tool-beautify-nav" type="button" class="ghost"
-	                data-help="Beautify mkdocs.yml nav formatting (nav block only; no file moves)">🧼 Beautify nav</button>
-	              <span class="sr-only" data-help="All edits auto-sync mkdocs.yml + files"></span>
-	              <button id="tool-debug" type="button" class="ghost" data-help="Toggle debug window (DnD logs)">🧪
-	                Debug</button>
-	            </div>
-	          </div>
-        </div>
-      </section>
-
       <div class="main-grid">
         <section class="card panel" id="panel-source">
           <div class="card-head">
