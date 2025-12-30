@@ -796,6 +796,10 @@ def _plan_partial_sync(nodes: list[Node], moved_ids: set[str]) -> tuple[list[tup
     page_moves: list[tuple[Path, Path]] = []
     asset_moves: list[tuple[Path, Path]] = []
     collisions: list[dict[str, Any]] = []
+    planned_sources: set[Path] = set()
+    used_rel: set[str] = set()
+
+    entries: list[tuple[Node, str, str]] = []
 
     def walk(items: list[Node], ancestors: list[Node], under_moved: bool):
         folder_dir = _compute_folder_dir(ancestors)
@@ -812,34 +816,68 @@ def _plan_partial_sync(nodes: list[Node], moved_ids: set[str]) -> tuple[list[tup
             desired_rel = f"{folder_dir}/{basename}" if folder_dir else basename
             desired_rel = _safe_rel_path(desired_rel)
             current_rel = _safe_rel_path(node.file_prev) if node.file_prev else _safe_rel_path(node.file)
-            src = DOCS_ROOT / current_rel
-            dst = DOCS_ROOT / desired_rel
-
-            if not src.exists():
-                continue
-
-            if src.resolve() == dst.resolve():
-                node.file = desired_rel
-                node.file_prev = None
-                continue
-
-            # Conflict check: block if destination exists and is not also a planned source.
-            if dst.exists() and dst.resolve() != src.resolve():
-                collisions.append({"type": "exists", "target": desired_rel, "title": node.title})
-                continue
-
-            page_moves.append((src, dst))
-            src_assets = src.with_suffix("")
-            dst_assets = dst.with_suffix("")
-            if src_assets.exists() and src_assets.is_dir():
-                if dst_assets.exists() and dst_assets.resolve() != src_assets.resolve():
-                    collisions.append({"type": "exists", "target": dst_assets.relative_to(DOCS_ROOT).as_posix(), "title": node.title})
-                    continue
-                asset_moves.append((src_assets, dst_assets))
-            node.file = desired_rel
-            node.file_prev = None
+            entries.append((node, current_rel, desired_rel))
 
     walk(nodes, [], False)
+
+    for node, current_rel, _ in entries:
+        src = DOCS_ROOT / current_rel
+        if src.exists():
+            planned_sources.add(src.resolve())
+            src_assets = src.with_suffix("")
+            if src_assets.exists() and src_assets.is_dir():
+                planned_sources.add(src_assets.resolve())
+
+    def _unique_rel(desired_rel: str, *, src: Path, all_sources: set[Path]) -> str:
+        desired_rel = _safe_rel_path(desired_rel)
+        dst = DOCS_ROOT / desired_rel
+        if desired_rel not in used_rel and (
+            (not dst.exists())
+            or (dst.resolve() == src.resolve())
+            or (dst.resolve() in all_sources)
+        ):
+            used_rel.add(desired_rel)
+            return desired_rel
+
+        parent = Path(desired_rel).parent.as_posix()
+        base = Path(desired_rel).name
+        stem = Path(base).stem
+        suffix = Path(base).suffix
+        i = 2
+        while True:
+            cand_base = f"{stem}-{i}{suffix}"
+            cand_rel = f"{parent}/{cand_base}" if parent and parent != "." else cand_base
+            cand_rel = _safe_rel_path(cand_rel)
+            if cand_rel in used_rel:
+                i += 1
+                continue
+            cand_path = DOCS_ROOT / cand_rel
+            if not cand_path.exists():
+                used_rel.add(cand_rel)
+                return cand_rel
+            i += 1
+
+    for node, current_rel, desired_rel in entries:
+        src = DOCS_ROOT / current_rel
+        if not src.exists():
+            continue
+        unique_rel = _unique_rel(desired_rel, src=src, all_sources=planned_sources)
+        dst = DOCS_ROOT / unique_rel
+        if src.resolve() == dst.resolve():
+            node.file = unique_rel
+            node.file_prev = None
+            continue
+
+        page_moves.append((src, dst))
+        src_assets = src.with_suffix("")
+        dst_assets = dst.with_suffix("")
+        if src_assets.exists() and src_assets.is_dir():
+            if dst_assets.exists() and dst_assets.resolve() != src_assets.resolve() and dst_assets.resolve() not in planned_sources:
+                collisions.append({"type": "exists", "target": dst_assets.relative_to(DOCS_ROOT).as_posix(), "title": node.title})
+            else:
+                asset_moves.append((src_assets, dst_assets))
+        node.file = unique_rel
+        node.file_prev = None
 
     if collisions:
         return [], [], collisions

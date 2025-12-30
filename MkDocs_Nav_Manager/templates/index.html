@@ -2193,8 +2193,9 @@
 
 	      if (mode === 'root') {
 	        const ctxs = detachManyWithContext(list);
+	        const targetDir = targetFolderDirForMove('root', '');
 	        for (const ctx of ctxs) {
-	          if (!promptRenameForOverview(ctx, 'root', 'root')) {
+	          if (!promptRenameForOverview(ctx, targetDir)) {
 	            restoreAll(ctxs);
 	            return;
 	          }
@@ -2209,8 +2210,9 @@
 	        targetInfo.node.children = Array.isArray(targetInfo.node.children) ? targetInfo.node.children : [];
 	        const ctxs = detachManyWithContext(list);
 	        const overviewIdx = targetInfo.node.children.findIndex(n => n && n.type === 'page' && n.is_overview);
+	        const targetDir = targetFolderDirForMove('inside', targetId);
 	        for (const ctx of ctxs) {
-	          if (!promptRenameForOverview(ctx, targetId, 'inside')) {
+	          if (!promptRenameForOverview(ctx, targetDir)) {
 	            restoreAll(ctxs);
 	            return;
 	          }
@@ -2226,7 +2228,6 @@
 	        const targetInfo = findNode(stateTree, targetId);
 	        if (!targetInfo) return;
 	        const siblings = targetInfo.siblings;
-	        const targetParentId = targetInfo.parent ? targetInfo.parent.id : 'root';
 	        const idx = siblings.findIndex(n => n.id === targetId);
 	        if (idx < 0) return;
 	        let insertAt = mode === 'before' ? idx : idx + 1;
@@ -2235,8 +2236,9 @@
 	          // Never insert before the overview slot.
 	          insertAt = overviewAt + 1;
 	        }
+	        const targetDir = targetFolderDirForMove(mode, targetId);
 	        for (const ctx of ctxs) {
-	          if (!promptRenameForOverview(ctx, targetParentId, mode)) {
+	          if (!promptRenameForOverview(ctx, targetDir)) {
 	            restoreAll(ctxs);
 	            return;
 	          }
@@ -2310,14 +2312,46 @@
       return contexts;
     }
 
-    function promptRenameForOverview(ctx, targetParentId, mode) {
+    function slugifyFileBase(text) {
+      const cleaned = String(text || '').trim().toLowerCase();
+      const slug = cleaned.replace(/[^0-9a-z._-]+/g, '-').replace(/^-+|-+$/g, '');
+      return slug || 'page';
+    }
+
+    function buildBasenameFromInput(input) {
+      const raw = String(input || '').trim().replace(/\\/g, '/');
+      if (!raw) return '';
+      const name = raw.split('/').pop();
+      if (!name) return '';
+      const lower = name.toLowerCase();
+      const allowed = ['.md', '.markdown', '.mdx'];
+      if (allowed.some(ext => lower.endsWith(ext))) return name;
+      if (name.includes('.')) return `${name}.md`;
+      return `${slugifyFileBase(name)}.md`;
+    }
+
+    function targetFolderDirForMove(mode, targetId) {
+      if (mode === 'root') return '';
+      if (mode === 'inside') return folderDirForId(targetId);
+      const targetInfo = findNode(stateTree, targetId);
+      if (targetInfo && targetInfo.parent && targetInfo.parent.type === 'folder') {
+        return folderDirForId(targetInfo.parent.id);
+      }
+      return '';
+    }
+
+    function promptRenameForOverview(ctx, targetDir) {
       if (!ctx || !ctx.node || !ctx.node.is_overview) return true;
-      const current = String(ctx.node.title || '').trim();
-      const fallback = current || 'Overview';
-      const next = prompt('Moving a section overview page. Enter a new title:', fallback);
-      if (next === null) return false;
-      const trimmed = String(next).trim();
-      ctx.node.title = trimmed || fallback;
+      const currentTitle = String(ctx.node.title || '').trim() || 'Overview';
+      const nextTitle = prompt('Moving a section overview page. Enter a new title (used for filename):', currentTitle);
+      if (nextTitle === null) return false;
+      const trimmedTitle = String(nextTitle).trim() || currentTitle;
+      const basename = buildBasenameFromInput(trimmedTitle);
+      if (!basename) return false;
+      const desiredRel = targetDir ? `${targetDir}/${basename}` : basename;
+      if (ctx.node.file && !ctx.node.file_prev) ctx.node.file_prev = ctx.node.file;
+      ctx.node.title = trimmedTitle;
+      ctx.node.file = desiredRel;
       ctx.node.is_overview = false;
       return true;
     }
