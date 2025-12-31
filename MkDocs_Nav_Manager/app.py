@@ -911,7 +911,7 @@ def _section_readme_template(section_name: str) -> str:
         "### **This chapter can be separated into below sections:**\n\n"
         "{% for p in page.parent.children %}\n"
         "{% if p.is_page and p.url and p.url != page.url %}\n"
-        "- [{{ p.title }}]({{ '/' ~ p.url.lstrip('/') }})\n"
+        "1. [{{ p.title }}]({{ '/' ~ p.url.lstrip('/') }})\n"
         "{% endif %}\n"
         "{% endfor %}\n"
     )

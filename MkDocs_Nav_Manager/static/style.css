@@ -404,6 +404,7 @@ body.theme-light .source-row.kind-dir .source-name {
   color: rgba(11, 18, 32, 0.88);
 }
 
+
 body.theme-light .source-ascii,
 body.theme-light .source-prefix,
 body.theme-light .node-meta {
@@ -858,6 +859,21 @@ body.is-resizing .splitter-h * {
   border-color: rgba(255, 107, 107, 0.6);
 }
 
+body.theme-light .status-box {
+  border-color: rgba(11, 18, 32, 0.14);
+  background: rgba(255, 255, 255, 0.9);
+  color: rgba(11, 18, 32, 0.82);
+}
+
+body.theme-light .status-box[data-type="success"] {
+  border-color: rgba(26, 159, 90, 0.45);
+}
+
+body.theme-light .status-box[data-type="error"] {
+  border-color: rgba(216, 59, 59, 0.55);
+}
+
+
 .tools-body .tools-group {
   border: 1px solid rgba(232, 238, 252, 0.10);
   border-radius: 12px;
@@ -995,10 +1011,39 @@ body.theme-light .info-errors {
 .info-hint {
   padding: 8px 10px;
   border-radius: 12px;
-  border: 1px solid rgba(106, 169, 255, 0.20);
-  background: rgba(106, 169, 255, 0.08);
+  border: 1px solid rgba(106, 169, 255, 0.28);
+  background: rgba(106, 169, 255, 0.12);
   color: rgba(232, 238, 252, 0.88);
   font-size: 12px;
+}
+
+body.theme-light .info-pill {
+  border-color: rgba(11, 18, 32, 0.16);
+  background: rgba(255, 255, 255, 0.7);
+  color: rgba(11, 18, 32, 0.78);
+}
+
+body.theme-light .info-details {
+  border-color: rgba(11, 18, 32, 0.14);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+body.theme-light .info-summary {
+  color: rgba(11, 18, 32, 0.6);
+}
+
+body.theme-light .info-details[open] .info-summary {
+  color: rgba(11, 18, 32, 0.82);
+}
+
+body.theme-light .info-line {
+  color: rgba(11, 18, 32, 0.7);
+}
+
+body.theme-light .info-hint {
+  border-color: rgba(47, 111, 255, 0.16);
+  background: rgba(255, 255, 255, 0.9);
+  color: rgba(11, 18, 32, 0.82);
 }
 
 #panel-info .card-head {
@@ -1121,6 +1166,14 @@ ul {
 
 .source-name.kind-file {
   color: rgba(232, 238, 252, 0.86);
+}
+
+body.theme-light .source-name.kind-dir {
+  color: rgba(47, 111, 255, 0.95);
+}
+
+body.theme-light .source-name.kind-file {
+  color: rgba(11, 18, 32, 0.78);
 }
 
 .source-name.kind-file[data-ext="pdf"] {
@@ -2142,6 +2195,14 @@ footer#status[data-type="error"] {
   white-space: pre-wrap;
   word-break: break-word;
   color: rgba(232, 238, 252, 0.78);
+}
+
+body.theme-light .debug-title {
+  color: rgba(11, 18, 32, 0.78);
+}
+
+body.theme-light .debug-log {
+  color: rgba(11, 18, 32, 0.72);
 }
 
 @media (max-width: 980px) {
