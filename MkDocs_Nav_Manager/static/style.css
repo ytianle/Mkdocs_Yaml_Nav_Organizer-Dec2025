@@ -223,7 +223,7 @@ button:active {
 
 .main-grid {
   display: grid;
-  grid-template-columns: minmax(240px, var(--left-width)) var(--split) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, var(--left-width)) var(--split) minmax(800px, 1fr);
   gap: 0;
   min-height: 0;
 }
@@ -503,6 +503,29 @@ body.rainbow-colors.theme-light #tree .node.page[data-depth="5"] > .row {
   background: rgb(200, 180, 255);
 }
 
+/* Depth 6+ becomes gray in rainbow mode - Light theme */
+body.rainbow-colors.theme-light #tree .node.dir[data-depth="6"] ,
+body.rainbow-colors.theme-light #tree .node.dir[data-depth="7"] ,
+body.rainbow-colors.theme-light #tree .node.dir[data-depth="8"] ,
+body.rainbow-colors.theme-light #tree .node.dir[data-depth="9"] {
+  background: rgb(200, 200, 210);
+  border-color: rgb(180, 180, 190);
+}
+
+body.rainbow-colors.theme-light #tree .node.dir[data-depth="6"] > .row,
+body.rainbow-colors.theme-light #tree .node.dir[data-depth="7"] > .row,
+body.rainbow-colors.theme-light #tree .node.dir[data-depth="8"] > .row,
+body.rainbow-colors.theme-light #tree .node.dir[data-depth="9"] > .row {
+  background: rgb(180, 180, 190);
+}
+
+body.rainbow-colors.theme-light #tree .node.page[data-depth="6"] > .row,
+body.rainbow-colors.theme-light #tree .node.page[data-depth="7"] > .row,
+body.rainbow-colors.theme-light #tree .node.page[data-depth="8"] > .row,
+body.rainbow-colors.theme-light #tree .node.page[data-depth="9"] > .row {
+  background: rgb(200, 200, 210);
+}
+
 body.theme-light #tree .node.dir>ul {
   border-top-color: rgba(11, 18, 32, 0.08);
   border-left-color: rgba(11, 18, 32, 0.10);
@@ -627,14 +650,18 @@ body.theme-light .inline-edit {
 
 .source-item { padding: 2px 6px; }
 
-.source-row { display:flex; align-items:center; gap:8px; border-radius:6px; }
+.source-row { display:flex; align-items:center; gap:8px; border-radius:6px; padding-left: 1px; }
 .source-row.kind-dir { color: var(--accent); font-weight:600; }
 .source-row.kind-file { color: var(--text); }
 .source-icon { width:18px; text-align:center; }
 .source-name { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .source-twist { width:16px; display:inline-block; text-align:center; }
 
-.source-children { border-left: 1px solid rgba(255,255,255,0.04); margin-left:12px; padding-left:8px; }
+.source-children { 
+  border-left: 1px solid rgba(232, 238, 252, 0.14);
+  margin-left: 7px !important;
+  padding-left: 0 !important;
+}
 
 .source-row.clickable:hover { background: rgba(106,169,255,0.06); }
 
@@ -657,7 +684,9 @@ body.theme-light .inline-edit {
 }
 
 /* Make hierarchy lines a bit more visible in light theme */
-body.theme-light .source-children { border-left-color: rgba(11,18,32,0.07); }
+body.theme-light .source-children {
+  border-left-color: rgba(11, 18, 32, 0.22);
+}
 
 
 .segmented button {
@@ -1732,6 +1761,29 @@ body.rainbow-colors #tree .node.page[data-depth="4"] > .row {
 
 body.rainbow-colors #tree .node.page[data-depth="5"] > .row {
   background: rgb(120, 100, 220);
+}
+
+/* Depth 6+ becomes gray in rainbow mode - Dark theme */
+body.rainbow-colors #tree .node.dir[data-depth="6"] ,
+body.rainbow-colors #tree .node.dir[data-depth="7"] ,
+body.rainbow-colors #tree .node.dir[data-depth="8"] ,
+body.rainbow-colors #tree .node.dir[data-depth="9"] {
+  background: rgb(100, 100, 110);
+  border-color: rgb(100, 100, 110);
+}
+
+body.rainbow-colors #tree .node.dir[data-depth="6"] > .row,
+body.rainbow-colors #tree .node.dir[data-depth="7"] > .row,
+body.rainbow-colors #tree .node.dir[data-depth="8"] > .row,
+body.rainbow-colors #tree .node.dir[data-depth="9"] > .row {
+  background: rgb(80, 80, 90);
+}
+
+body.rainbow-colors #tree .node.page[data-depth="6"] > .row,
+body.rainbow-colors #tree .node.page[data-depth="7"] > .row,
+body.rainbow-colors #tree .node.page[data-depth="8"] > .row,
+body.rainbow-colors #tree .node.page[data-depth="9"] > .row {
+  background: rgb(100, 100, 110);
 }
 
 /* Pages keep simple uniform background when rainbow is OFF */

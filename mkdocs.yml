@@ -1,14 +1,10 @@
 site_name: MkDocs Nav Manager
 nav:
-  - Home:
-    - home/index.md
-    - ss: home/ss.md
   - Section 1:
     - section1/index.md
     - Page 2: section1/page2.md
     - subsection:
       - section1/subsection/page3.md
-      - ss: section1/subsection/ss.md
       - '23': section1/subsection/23.md
       - 33r:
         - section1/subsection/33r/README.md
@@ -23,6 +19,12 @@ nav:
           - ss:
             - section1/subsection/2332/22/ss/README.md
             - '222': section1/subsection/2332/22/ss/222.md
+            - '444':
+              - section1/subsection/2332/22/ss/444/README.md
+              - '99': section1/subsection/2332/22/ss/444/99.md
+              - '77':
+                - section1/subsection/2332/22/ss/444/77/README.md
+                - '99': section1/subsection/2332/22/ss/444/77/99.md
     - Page 1: section1/page1.md
   - Section 2:
     - section2/README.md
