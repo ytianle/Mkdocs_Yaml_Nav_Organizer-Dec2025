@@ -52,10 +52,22 @@
             <path d="M8 2a6 6 0 1 0 4.2 10.2A5 5 0 1 1 3.8 3.8 6 6 0 0 0 8 2z"/>
           </svg>
         </button>
+        <button id="tool-debug" type="button" class="ghost icon-button" data-help="Toggle debug window (DnD logs)"
+          aria-label="Toggle debug">🐞</button>
       </div>
     </header>
 
     <div id="tool-tooltip" class="tool-tooltip" hidden></div>
+    <div id="tree-context" class="context-menu" hidden>
+      <button type="button" data-action="new-folder">🗂️ New Section</button>
+      <button type="button" data-action="new-page">📄 New Page</button>
+      <button type="button" data-action="new-page-with-folder">📁 Page w/ Folder</button>
+      <button type="button" data-action="rename">✏️ Rename</button>
+      <button type="button" data-action="delete" class="danger">🗑️ Delete</button>
+      <button type="button" data-action="locate">🧭 Locate</button>
+      <button type="button" data-action="open">🔎 Open</button>
+      <button type="button" data-action="edit">📝 Edit</button>
+    </div>
 
     <section class="dock-tools tools-toolbar" id="panel-tools">
       <div class="tools-bar" role="toolbar" aria-label="Tools">
@@ -86,14 +98,6 @@
             <circle cx="8" cy="5" r="2" stroke="currentColor" stroke-width="1.5"/>
             <path d="M4 10c0-2 1.5-3 4-3s4 1 4 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
             <path d="M3 13l1.5-1.5M13 13l-1.5-1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-          </svg>
-        </button>
-        <button id="tool-debug" type="button" class="ghost icon-button"
-          data-help="Toggle debug window (DnD logs)" aria-label="Toggle debug">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M8 3v2m0 6v2M5 5l1.5 1.5M11 5L9.5 6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            <circle cx="8" cy="8" r="2.5" stroke="currentColor" stroke-width="1.5"/>
-            <path d="M4 8H2M14 8h-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
         </button>
       </div>
@@ -320,6 +324,7 @@
     let showTree = true;
     let showInfo = false;
     let theme = 'dark';
+    let treeContextOpen = false;
     // Registry for one-time global handlers that clear the persistent located highlight
     let locatedClearHandlers = [];
     // Suppress clearing for a short window right after installing handlers
@@ -375,6 +380,7 @@
         treeLocateBtn: document.getElementById('tree-locate-btn'),
         openFileBtn: document.getElementById('open-file-btn'),
         simpleEditBtn: document.getElementById('simple-edit-btn'),
+        treeContext: document.getElementById('tree-context'),
         simpleEditor: document.getElementById('simple-editor'),
         simpleEditFile: document.getElementById('simple-edit-file'),
         simpleEditDiff: document.getElementById('simple-edit-diff'),
@@ -509,7 +515,7 @@
       });
 
       // Locate button in the Doc Tree header: locate selected page/overview in Source pane
-      if (els.treeLocateBtn) els.treeLocateBtn.addEventListener('click', () => {
+      const locateSelectedInSource = () => {
         // Determine selection id: prefer single selectedId, then first of selectedIds
         const id = selectedId || (selectedIds && selectedIds.size ? Array.from(selectedIds)[0] : '');
         // Helper to open source panel and call locateByFile
@@ -541,7 +547,8 @@
           if (overview && overview.file) return openAndLocate(overview.file);
         }
         setStatus('⚠️ Selected node has no associated file to locate.', 'info');
-      });
+      };
+      if (els.treeLocateBtn) els.treeLocateBtn.addEventListener('click', locateSelectedInSource);
 
       function getFileForNode(node) {
         if (!node) return '';
@@ -566,7 +573,7 @@
         return getFileForNode(found.node);
       }
 
-      if (els.openFileBtn) els.openFileBtn.addEventListener('click', async () => {
+      const openSelectedFile = async () => {
         let id = selectedId || (selectedIds && selectedIds.size ? Array.from(selectedIds)[0] : '');
         const file = resolveSelectedFile(id);
         if (!file) return setStatus('⚠️ No page selected to open.', 'info');
@@ -581,7 +588,8 @@
         } catch (e) {
           setStatus(e.message || 'Open failed.', 'error');
         }
-      });
+      };
+      if (els.openFileBtn) els.openFileBtn.addEventListener('click', openSelectedFile);
 
       const editorState = {
         currentFile: '',
@@ -589,12 +597,16 @@
         originalLines: []
       };
 
-      const modalState = { resolve: null };
+      const modalState = { resolve: null, cleanup: null };
 
       const closeModal = (value) => {
         if (!modalState.resolve) return;
         const resolve = modalState.resolve;
         modalState.resolve = null;
+        if (modalState.cleanup) {
+          modalState.cleanup();
+          modalState.cleanup = null;
+        }
         if (els.modal) els.modal.hidden = true;
         resolve(value);
       };
@@ -661,8 +673,12 @@
               closeModal({ value: cancelValue, input: hasInput && els.modalInput ? els.modalInput.value : '' });
             }
           };
-          window.addEventListener('keydown', onKey, { once: true });
-          if (els.modal) els.modal.addEventListener('click', onBackdrop, { once: true });
+          modalState.cleanup = () => {
+            window.removeEventListener('keydown', onKey);
+            if (els.modal) els.modal.removeEventListener('click', onBackdrop);
+          };
+          window.addEventListener('keydown', onKey);
+          if (els.modal) els.modal.addEventListener('click', onBackdrop);
         });
       };
 
@@ -903,7 +919,7 @@
         loadEditorFile(file);
       }
 
-      if (els.simpleEditBtn) els.simpleEditBtn.addEventListener('click', () => {
+      const openSimpleEditorFromSelection = () => {
         const id = selectedId || (selectedIds && selectedIds.size ? Array.from(selectedIds)[0] : '');
         if (!id && selectedDisplaySlotFolderId) {
           const found = findNode(stateTree, selectedDisplaySlotFolderId);
@@ -916,6 +932,113 @@
         const file = getFileForNode(found.node);
         if (!file) return setStatus('⚠️ Selected node has no associated file to edit.', 'info');
         openSimpleEditor(file);
+      };
+      if (els.simpleEditBtn) els.simpleEditBtn.addEventListener('click', openSimpleEditorFromSelection);
+
+      const hideTreeContext = () => {
+        if (!els.treeContext) return;
+        els.treeContext.hidden = true;
+        treeContextOpen = false;
+      };
+
+      const positionTreeContext = (x, y) => {
+        if (!els.treeContext) return;
+        els.treeContext.hidden = false;
+        treeContextOpen = true;
+        const menu = els.treeContext;
+        const padding = 12;
+        const maxX = window.innerWidth - padding;
+        const maxY = window.innerHeight - padding;
+        menu.style.left = `${Math.min(x, maxX)}px`;
+        menu.style.top = `${Math.min(y, maxY)}px`;
+        const rect = menu.getBoundingClientRect();
+        if (rect.right > maxX) menu.style.left = `${Math.max(padding, maxX - rect.width)}px`;
+        if (rect.bottom > maxY) menu.style.top = `${Math.max(padding, maxY - rect.height)}px`;
+      };
+
+      const updateTreeContextState = () => {
+        if (!els.treeContext) return;
+        const hasSelection = !!selectedId || (selectedIds && selectedIds.size) || !!selectedDisplaySlotFolderId;
+        const hasFile = !!resolveSelectedFile('');
+        const buttons = Array.from(els.treeContext.querySelectorAll('button[data-action]'));
+        buttons.forEach((btn) => {
+          const action = btn.dataset.action || '';
+          let enabled = true;
+          if (action === 'rename') enabled = !!selectedId;
+          if (action === 'delete') enabled = !!selectedId || (selectedIds && selectedIds.size);
+          if (action === 'locate' || action === 'open' || action === 'edit') enabled = hasFile;
+          if (!hasSelection && (action === 'rename' || action === 'delete' || action === 'locate' || action === 'open' || action === 'edit')) enabled = false;
+          btn.disabled = !enabled;
+        });
+      };
+
+      const selectContextTarget = (target) => {
+        if (!target) return;
+        if (target.classList.contains('overview-inline')) {
+          const overviewId = target.dataset.overviewId || '';
+          const folderId = target.dataset.folderId || '';
+          if (overviewId) {
+            if (!(selectedIds && selectedIds.size && selectedIds.has(overviewId))) selectNode(overviewId);
+          } else if (folderId) {
+            selectedId = '';
+            selectedIds = new Set();
+            selectionAnchorId = '';
+            selectionParentKey = '';
+            selectedDisplaySlotFolderId = folderId;
+            syncSelectionClasses();
+            if (typeof updateInfo === 'function') updateInfo();
+          }
+          return;
+        }
+        const id = target.dataset.id || '';
+        if (!id) return;
+        if (selectedIds && selectedIds.size && selectedIds.has(id)) return;
+        selectNode(id);
+      };
+
+      if (els.tree) {
+        els.tree.addEventListener('contextmenu', (e) => {
+          const target = e.target.closest('#tree li.node, #tree .overview-inline');
+          if (!target) return;
+          e.preventDefault();
+          if (activeInlineEdit) return;
+          selectContextTarget(target);
+          updateTreeContextState();
+          positionTreeContext(e.clientX, e.clientY);
+        });
+      }
+
+      if (els.treeContext) {
+        els.treeContext.addEventListener('click', (e) => {
+          const btn = e.target.closest('button[data-action]');
+          if (!btn || btn.disabled) return;
+          const action = btn.dataset.action || '';
+          if (action === 'new-folder') createNode('folder');
+          if (action === 'new-page') createNode('page');
+          if (action === 'new-page-with-folder') createPageWithFolder();
+          if (action === 'rename') renameSelected();
+          if (action === 'delete') deleteSelected();
+          if (action === 'locate') locateSelectedInSource();
+          if (action === 'open') openSelectedFile();
+          if (action === 'edit') openSimpleEditorFromSelection();
+          hideTreeContext();
+        });
+      }
+
+      document.addEventListener('pointerdown', (e) => {
+        if (!treeContextOpen) return;
+        if (!els.treeContext) return;
+        if (e.target && els.treeContext.contains(e.target)) return;
+        hideTreeContext();
+      });
+
+      window.addEventListener('scroll', () => {
+        if (treeContextOpen) hideTreeContext();
+      }, { passive: true });
+
+      window.addEventListener('keydown', (e) => {
+        if (!treeContextOpen) return;
+        if (e.key === 'Escape') hideTreeContext();
       });
 
       if (els.simpleEditClose) els.simpleEditClose.addEventListener('click', async () => {

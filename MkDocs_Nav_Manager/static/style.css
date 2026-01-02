@@ -381,6 +381,11 @@ body.theme-light .switch-text {
   justify-content: center;
 }
 
+.toolbar .inline-actions .icon-button {
+  font-size: 16px;
+  line-height: 1;
+}
+
 .segmented {
   display: flex;
   align-items: center;
@@ -830,6 +835,46 @@ body.is-resizing .splitter-h * {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
   pointer-events: none;
   z-index: 9999;
+}
+
+.context-menu {
+  position: fixed;
+  left: 0;
+  top: 0;
+  min-width: 180px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(232, 238, 252, 0.14);
+  background: rgba(10, 16, 34, 0.95);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 16px 30px rgba(0, 0, 0, 0.35);
+  display: grid;
+  gap: 4px;
+  z-index: 10000;
+}
+
+.context-menu button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  justify-content: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  padding: 8px 10px;
+}
+
+.context-menu button:disabled {
+  opacity: 0.4;
+}
+
+.context-menu button.danger {
+  color: var(--error);
+}
+
+body.theme-light .context-menu {
+  border-color: rgba(10, 16, 34, 0.14);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 16px 30px rgba(10, 16, 34, 0.18);
 }
 
 .status-box {
