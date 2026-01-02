@@ -215,7 +215,12 @@
         <section class="card panel" id="panel-info">
           <div class="card-head">
             <h2>ℹ️ Info</h2>
-            <span class="muted">Hover tools for hints</span>
+            <div class="inline-actions">
+              <span class="muted">Hover tools for hints</span>
+              <button id="status-expand-btn" type="button" class="ghost" data-help="Expand status history">
+                Expand
+              </button>
+            </div>
           </div>
           <div class="list-shell info-body">
             <div id="status" class="status-box" data-type="info"></div>
@@ -278,7 +283,10 @@
           <div class="modal-title" id="modal-title"></div>
           <div class="modal-message" id="modal-message"></div>
           <div class="modal-input-wrap" id="modal-input-wrap" hidden>
-            <input id="modal-input" class="modal-input" type="text" />
+            <label class="modal-checkbox">
+              <input id="modal-input" class="modal-input" type="text" />
+              <span id="modal-input-label" class="modal-input-label"></span>
+            </label>
           </div>
           <div class="modal-actions" id="modal-actions"></div>
         </div>
@@ -313,6 +321,9 @@
     let maybeLoadEditorFromSelection = () => {};
 		    let activeInlineEdit = null;
 		    let autoSyncTimer = null;
+    let statusHistory = [];
+    let statusExpanded = false;
+    let skipEmptyDeleteConfirmSession = false;
     let showChoice = async () => 'cancel';
     let showConfirm = async () => false;
     let showPrompt = async () => null;
@@ -348,7 +359,8 @@
         infoSelection: document.getElementById('info-selection'),
 	        infoSelectionPill: document.getElementById('info-selection-pill'),
 	        infoDetails: document.getElementById('info-details'),
-	        infoErrors: document.getElementById('info-errors'),
+        infoErrors: document.getElementById('info-errors'),
+        statusExpandBtn: document.getElementById('status-expand-btn'),
         sourceViewBtn: document.getElementById('source-view-btn'),
         newFolderBtn: document.getElementById('new-folder-btn'),
         newPageBtn: document.getElementById('new-page-btn'),
@@ -395,6 +407,7 @@
         modalMessage: document.getElementById('modal-message'),
         modalInputWrap: document.getElementById('modal-input-wrap'),
         modalInput: document.getElementById('modal-input'),
+        modalInputLabel: document.getElementById('modal-input-label'),
         modalActions: document.getElementById('modal-actions'),
       };
 
@@ -455,6 +468,23 @@
       showInfo = localStorage.getItem('page_tree_show_info') !== 'false';
       initTheme();
       applyPanelVisibility();
+      renderStatusHistory();
+      if (els.status) {
+        if (window.ResizeObserver) {
+          const statusObserver = new ResizeObserver(() => renderStatusHistory());
+          statusObserver.observe(els.status);
+        } else {
+          window.addEventListener('resize', renderStatusHistory);
+        }
+      }
+      if (els.statusExpandBtn) {
+        els.statusExpandBtn.addEventListener('click', () => {
+          statusExpanded = !statusExpanded;
+          if (els.status) els.status.classList.toggle('is-expanded', statusExpanded);
+          els.statusExpandBtn.textContent = statusExpanded ? 'Collapse' : 'Expand';
+          renderStatusHistory();
+        });
+      }
 
       if (els.toggleTools) els.toggleTools.addEventListener('click', () => {
         showTools = !showTools;
@@ -620,21 +650,34 @@
         const hasInput = !!opts.input;
         const defaultValue = opts.input && typeof opts.input.value === 'string' ? opts.input.value : '';
         const placeholder = opts.input && typeof opts.input.placeholder === 'string' ? opts.input.placeholder : '';
+        const inputType = opts.input && typeof opts.input.type === 'string' ? opts.input.type : 'text';
+        const inputLabel = opts.input && typeof opts.input.label === 'string' ? opts.input.label : '';
         return new Promise((resolve) => {
           modalState.resolve = resolve;
           if (els.modalTitle) els.modalTitle.textContent = title;
           if (els.modalMessage) els.modalMessage.textContent = message;
           if (els.modalInputWrap) {
             els.modalInputWrap.hidden = !hasInput;
+            els.modalInputWrap.classList.toggle('is-checkbox', hasInput && inputType === 'checkbox');
           }
           if (els.modalInput) {
             if (hasInput) {
-              els.modalInput.value = defaultValue;
-              els.modalInput.placeholder = placeholder;
+              els.modalInput.type = inputType === 'checkbox' ? 'checkbox' : 'text';
+              if (inputType === 'checkbox') {
+                els.modalInput.checked = !!opts.input.value;
+                els.modalInput.placeholder = '';
+              } else {
+                els.modalInput.value = defaultValue;
+                els.modalInput.placeholder = placeholder;
+              }
             } else {
               els.modalInput.value = '';
               els.modalInput.placeholder = '';
             }
+          }
+          if (els.modalInputLabel) {
+            els.modalInputLabel.textContent = inputLabel;
+            els.modalInputLabel.hidden = !hasInput || !inputLabel;
           }
           if (els.modalActions) {
             els.modalActions.innerHTML = '';
@@ -645,7 +688,9 @@
               if (btn.primary) b.classList.add('active');
               if (btn.ghost) b.classList.add('ghost');
               b.addEventListener('click', () => {
-                const inputValue = hasInput && els.modalInput ? els.modalInput.value : '';
+                const inputValue = hasInput && els.modalInput
+                  ? (els.modalInput.type === 'checkbox' ? els.modalInput.checked : els.modalInput.value)
+                  : '';
                 closeModal({ value: btn.value, input: inputValue });
               });
               els.modalActions.appendChild(b);
@@ -656,21 +701,29 @@
           if (primary) primary.focus();
           if (hasInput && els.modalInput) {
             els.modalInput.focus();
-            els.modalInput.select();
+            if (els.modalInput.type !== 'checkbox') els.modalInput.select();
           }
           const onKey = (e) => {
             if (e.key === 'Escape' && modalState.resolve) {
-              closeModal({ value: cancelValue, input: hasInput && els.modalInput ? els.modalInput.value : '' });
+              const inputValue = hasInput && els.modalInput
+                ? (els.modalInput.type === 'checkbox' ? els.modalInput.checked : els.modalInput.value)
+                : '';
+              closeModal({ value: cancelValue, input: inputValue });
             }
             if (e.key === 'Enter' && hasInput && primary && modalState.resolve) {
-              const inputValue = els.modalInput ? els.modalInput.value : '';
+              const inputValue = els.modalInput
+                ? (els.modalInput.type === 'checkbox' ? els.modalInput.checked : els.modalInput.value)
+                : '';
               closeModal({ value: buttons.find(b => b.primary)?.value ?? cancelValue, input: inputValue });
             }
           };
           const onBackdrop = (e) => {
             if (!els.modal || !modalState.resolve) return;
             if (e.target && e.target.classList && e.target.classList.contains('modal-backdrop')) {
-              closeModal({ value: cancelValue, input: hasInput && els.modalInput ? els.modalInput.value : '' });
+              const inputValue = hasInput && els.modalInput
+                ? (els.modalInput.type === 'checkbox' ? els.modalInput.checked : els.modalInput.value)
+                : '';
+              closeModal({ value: cancelValue, input: inputValue });
             }
           };
           modalState.cleanup = () => {
@@ -1166,7 +1219,7 @@
 		      dragMode = els.dragModeToggle.checked ? 'sync_files' : 'nav_only';
 		      localStorage.setItem('page_tree_drag_mode', dragMode);
 		      updateDragModeSwitch();
-		      setStatus(dragMode === 'nav_only' ? 'Drag: Nav only' : 'Drag: Nav + Files', 'info');
+		      setStatus(dragMode === 'nav_only' ? '⛓️‍💥 Drag: Nav only' : '⛓️ Drag: Nav + Files', 'info');
 		    }
 
 		    function updateDragModeSwitch() {
@@ -1763,9 +1816,23 @@
       return data;
     }
 
+    function renderStatusHistory() {
+      if (!els.status) return;
+      if (statusExpanded) {
+        els.status.textContent = statusHistory.join('\n');
+      } else {
+        els.status.textContent = statusHistory[statusHistory.length - 1] || '';
+      }
+    }
+
     function setStatus(message, type) {
-      els.status.textContent = message || '';
+      const text = String(message || '').trim();
+      if (text) {
+        statusHistory.push(text);
+        if (statusHistory.length > 20) statusHistory = statusHistory.slice(-20);
+      }
       els.status.dataset.type = type || 'info';
+      renderStatusHistory();
     }
 
     function setInfoMeta(text) {
@@ -3333,6 +3400,21 @@
 	        if (info.parent && info.parent.type === 'folder') return folderDirForId(info.parent.id);
 	        return '';
 	      })();
+	      {
+	        const id = selectedId || selectedDisplaySlotFolderId;
+	        const info = id ? findNode(stateTree, id) : null;
+	        const meta = info && info.node ? {
+	          id,
+	          type: info.node.type,
+	          title: info.node.title,
+	          segment: info.node.segment,
+	          file: info.node.file
+	        } : { id };
+	        console.warn('[createNode] parent_dir', { parentDir, meta, selectedId, selectedDisplaySlotFolderId });
+	        if (!parentDir) {
+	          setStatus('⚠️ parent_dir is empty; creation will go to root. Check selection/segment.', 'info');
+	        }
+	      }
 
 	      let newId = '';
 	      withHistory('create', () => {
@@ -3459,6 +3541,21 @@
 	        if (info.parent && info.parent.type === 'folder') return folderDirForId(info.parent.id);
 	        return '';
 	      })();
+	      {
+	        const id = selectedId || selectedDisplaySlotFolderId;
+	        const info = id ? findNode(stateTree, id) : null;
+	        const meta = info && info.node ? {
+	          id,
+	          type: info.node.type,
+	          title: info.node.title,
+	          segment: info.node.segment,
+	          file: info.node.file
+	        } : { id };
+	        console.warn('[createPageWithFolder] parent_dir', { parentDir, meta, selectedId, selectedDisplaySlotFolderId });
+	        if (!parentDir) {
+	          setStatus('⚠️ parent_dir is empty; creation will go to root. Check selection/segment.', 'info');
+	        }
+	      }
 
 	      let pageId = '';
 	      withHistory('create.page_with_folder', () => {
@@ -3734,18 +3831,56 @@
       const dirsToDelete = folderCheck.emptyDirs;
       const hasFiles = filesToDelete.length > 0;
       const hasDirs = dirsToDelete.length > 0;
+      const navOnly = dragMode === 'nav_only';
+      const overviewFiles = (() => {
+        const out = new Set();
+        for (const id of ids) {
+          const found = findNode(stateTree, id);
+          if (!found || !found.node || found.node.type !== 'folder') continue;
+          const children = Array.isArray(found.node.children) ? found.node.children : [];
+          const overview = children.find(c => c && c.type === 'page' && c.is_overview && c.file);
+          if (overview && overview.file) out.add(String(overview.file).replace(/^\.\//, '').trim());
+        }
+        return out;
+      })();
+      const nonOverviewFiles = filesToDelete.filter(f => !overviewFiles.has(f));
+      const emptyOnly = hasDirs && nonOverviewFiles.length === 0;
+      const skipEmptyDeleteConfirm = skipEmptyDeleteConfirmSession;
 
       const summary = [
         `Delete ${ids.length} item(s) from the tree`,
         hasFiles ? `delete ${filesToDelete.length} page file(s) on disk` : null,
         hasDirs ? `delete ${dirsToDelete.length} empty folder(s) on disk` : null,
       ].filter(Boolean).join(', ') + '. Continue?';
-      const ok = await showConfirm(summary, {
-        title: 'Delete',
-        okText: 'Delete',
-        cancelText: 'Cancel'
-      });
-      if (!ok) return;
+      if (emptyOnly && !navOnly) {
+        if (!skipEmptyDeleteConfirm) {
+          const res = await showChoice({
+            title: 'Delete',
+            message: summary,
+            cancelValue: false,
+            input: {
+              type: 'checkbox',
+              value: false,
+            label: 'Do not ask again for empty-folder deletes (this session)'
+            },
+            buttons: [
+              { label: 'Delete', value: true, primary: true },
+              { label: 'Cancel', value: false, ghost: true }
+            ]
+          });
+          if (!res || !res.value) return;
+          if (res.input) skipEmptyDeleteConfirmSession = true;
+        } else {
+          setStatus('ℹ️ Empty-folder delete (sync files), confirmation skipped.', 'info');
+        }
+      } else {
+        const ok = await showConfirm(summary, {
+          title: 'Delete',
+          okText: 'Delete',
+          cancelText: 'Cancel'
+        });
+        if (!ok) return;
+      }
       let removed = null;
       withHistory('delete', () => {
         const ctxs = detachManyWithContext(ids);
@@ -3757,9 +3892,20 @@
       setStatus(removed ? `Deleted ${removed.count || 1}.` : 'Not found.', removed ? 'success' : 'info');
       scheduleNavOnly('delete.tree');
 
-      if (hasFiles) await deleteFilesOnDisk(filesToDelete, { deleteAssets: true });
-      if (hasDirs) await deleteDirsOnDisk(dirsToDelete);
-      if (hasFiles || hasDirs) scheduleNavOnly('delete.disk');
+      if (!navOnly) {
+        let fileResult = { deleted: [], errors: [] };
+        if (hasFiles) fileResult = await deleteFilesOnDisk(filesToDelete, { deleteAssets: true });
+        if (hasDirs) {
+          if (fileResult.errors && fileResult.errors.length) {
+            setStatus('⚠️ Skipped deleting folders because some files failed to delete.', 'info');
+          } else {
+            await deleteDirsOnDisk(dirsToDelete);
+          }
+        }
+        if (hasFiles || hasDirs) scheduleNavOnly('delete.disk');
+      } else if (hasFiles || hasDirs) {
+        setStatus('⚠️ Nav-only mode: disk folders/files unchanged. Clean manually if needed.', 'info');
+      }
     }
 
 	    function classifyFoldersForDelete(ids) {
@@ -3854,11 +4000,16 @@
         });
         const deleted = Array.isArray(data.deleted) ? data.deleted : [];
         const errors = Array.isArray(data.errors) ? data.errors : [];
-        const msg = `✅ Deleted ${deleted.length} item(s) from disk.${errors.length ? ` errors:${errors.length}` : ''}`;
+        const list = deleted.map(item => item && item.path ? item.path : '').filter(Boolean);
+        const head = list[0] ? ` ${list[0]}` : '';
+        const more = list.length > 1 ? ` +${list.length - 1}` : '';
+        const msg = `✅ Deleted ${deleted.length} item(s) from disk.${head}${more}${errors.length ? ` errors:${errors.length}` : ''}`;
         setStatus(msg, errors.length ? 'error' : 'success');
         await loadSource();
+        return { deleted, errors };
       } catch (e) {
         setStatus(e.message || '⛔️ Delete files failed.', 'error');
+        return { deleted: [], errors: [{ error: e.message || 'Delete files failed.' }] };
       }
     }
 
@@ -3873,7 +4024,10 @@
         });
         const deleted = Array.isArray(data.deleted) ? data.deleted : [];
         const errors = Array.isArray(data.errors) ? data.errors : [];
-        const msg = `✅ Deleted ${deleted.length} empty folder(s).${errors.length ? ` errors:${errors.length}` : ''}`;
+        const list = deleted.map(item => item && item.path ? item.path : '').filter(Boolean);
+        const head = list[0] ? ` ${list[0]}` : '';
+        const more = list.length > 1 ? ` +${list.length - 1}` : '';
+        const msg = `✅ Deleted ${deleted.length} empty folder(s).${head}${more}${errors.length ? ` errors:${errors.length}` : ''}`;
         setStatus(msg, errors.length ? 'error' : 'success');
         await loadSource();
       } catch (e) {

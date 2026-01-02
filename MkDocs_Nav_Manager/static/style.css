@@ -885,7 +885,16 @@ body.theme-light .context-menu {
   border-radius: 12px;
   background: rgba(17, 26, 51, 0.45);
   min-height: 38px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-box.is-expanded {
   white-space: pre-wrap;
+  overflow: auto;
+  text-overflow: clip;
+  max-height: 220px;
 }
 
 .status-box[data-type="success"] {
@@ -1686,6 +1695,22 @@ body.theme-light .md-line-changed {
 
 .modal-input-wrap {
   margin-bottom: 16px;
+}
+
+.modal-input-wrap.is-checkbox .modal-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-input-wrap.is-checkbox .modal-input {
+  width: auto;
+  padding: 0;
+}
+
+.modal-input-label {
+  font-size: 13px;
+  color: rgba(232, 238, 252, 0.8);
 }
 
 .modal-input {
