@@ -287,6 +287,14 @@
     let lastDepthAction = '';
     let lastDepthValue = 5;
     let toolTipEl = null;
+    let uiStateLoaded = false;
+    let uiStateSaveTimer = null;
+    let uiStateLastSavedAt = 0;
+    let uiStateSaving = false;
+    let uiStateSavePending = false;
+    let uiState = {};
+    let pendingTreeRestore = false;
+    let pendingSourceRestore = false;
     let maybeLoadEditorFromSelection = () => {};
 		    let activeInlineEdit = null;
 		    let autoSyncTimer = null;
@@ -310,7 +318,7 @@
     // Suppress clearing for a short window right after installing handlers
     let locatedSuppressUntil = 0;
 
-	    document.addEventListener('DOMContentLoaded', () => {
+	    document.addEventListener('DOMContentLoaded', async () => {
       els = {
         meta: document.getElementById('meta'),
         status: document.getElementById('status'),
@@ -1237,8 +1245,9 @@
 	      dragMode = localStorage.getItem('page_tree_drag_mode') || 'sync_files';
 	      updateDragModeSwitch();
 	      loadMeta();
+	      await loadUiState();
 	      // Default: auto-load mkdocs.yml on entry. If invalid, block rendering.
-	      bootstrap();
+	      await bootstrap();
 		    });
 
 		    function onDragModeToggle() {
@@ -1431,6 +1440,7 @@
           }
           updateDepthButtons();
           renderTree();
+          scheduleUiStateSave();
         });
       });
     }
@@ -1496,6 +1506,7 @@
     function persistScrollPosition(key, el) {
       if (!el || !key) return;
       localStorage.setItem(key, String(el.scrollTop || 0));
+      scheduleUiStateSave();
     }
 
     function restoreScrollPosition(key, el) {
@@ -1504,6 +1515,95 @@
       const value = parseInt(String(raw || '0'), 10);
       if (!Number.isFinite(value)) return;
       el.scrollTop = value;
+    }
+
+    function scheduleUiStateSave() {
+      if (!uiStateLoaded) return;
+      if (uiStateSaving) {
+        uiStateSavePending = true;
+        return;
+      }
+      const now = Date.now();
+      const elapsed = now - uiStateLastSavedAt;
+      if (elapsed >= 3000) {
+        if (uiStateSaveTimer) {
+          clearTimeout(uiStateSaveTimer);
+          uiStateSaveTimer = null;
+        }
+        saveUiState();
+        return;
+      }
+      const delay = Math.max(3000 - elapsed, 50);
+      if (uiStateSaveTimer) return;
+      uiStateSaveTimer = setTimeout(() => {
+        uiStateSaveTimer = null;
+        saveUiState();
+      }, delay);
+    }
+
+    async function saveUiState() {
+      if (!uiStateLoaded) return;
+      if (uiStateSaving) {
+        uiStateSavePending = true;
+        return;
+      }
+      uiStateSaving = true;
+      uiStateLastSavedAt = Date.now();
+      const payload = buildUiState();
+      try {
+        await fetchJson('/api/ui_state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+      } catch (e) {
+        // Ignore UI state save failures.
+      } finally {
+        uiStateSaving = false;
+        if (uiStateSavePending) {
+          uiStateSavePending = false;
+          scheduleUiStateSave();
+        }
+      }
+    }
+
+    async function loadUiState() {
+      try {
+        const data = await fetchJson('/api/ui_state');
+        if (data && typeof data === 'object') {
+          uiState = data;
+          applyUiState(uiState);
+        }
+      } catch (e) {
+        uiState = {};
+      }
+      uiStateLoaded = true;
+    }
+
+    function applyUiState(state) {
+      if (!state || typeof state !== 'object') return;
+      if (Array.isArray(state.tree_collapsed)) {
+        treeCollapsed = new Set(state.tree_collapsed);
+        normalizeTreeCollapsed();
+        persistTreeCollapsed();
+      }
+      if (Array.isArray(state.source_collapsed)) {
+        sourceCollapsed = new Set(state.source_collapsed);
+        persistSourceCollapsed();
+      }
+      if (Number.isFinite(state.last_depth_value)) {
+        lastDepthValue = state.last_depth_value;
+      }
+      if (typeof state.last_depth_action === 'string') {
+        lastDepthAction = state.last_depth_action;
+        updateDepthButtons();
+      }
+      if (state.tree_anchor || Number.isFinite(state.tree_scroll)) {
+        pendingTreeRestore = true;
+      }
+      if (state.source_anchor || Number.isFinite(state.source_scroll)) {
+        pendingSourceRestore = true;
+      }
     }
 
     function treeSignature(tree) {
@@ -2153,15 +2253,18 @@
       els.source.innerHTML = '';
       if (!Array.isArray(sourceTree) || !sourceTree.length) {
         els.source.textContent = '(no markdown files found)';
-        restoreScrollPosition('page_tree_scroll_source', els.source);
+        if (pendingSourceRestore) restoreSourceFromUiState();
+        else restoreScrollPosition('page_tree_scroll_source', els.source);
         return;
       }
       els.source.appendChild(sourceView === 'ascii' ? buildSourceAscii(sourceTree) : buildSourceList(sourceTree));
-      restoreScrollPosition('page_tree_scroll_source', els.source);
+      if (pendingSourceRestore) restoreSourceFromUiState();
+      else restoreScrollPosition('page_tree_scroll_source', els.source);
     }
 
     function persistSourceCollapsed() {
       localStorage.setItem('page_tree_source_collapsed', JSON.stringify(Array.from(sourceCollapsed)));
+      scheduleUiStateSave();
     }
 
     function toggleSourceDir(path) {
@@ -2576,6 +2679,153 @@
       return (path || '').trim().replace(/^\.\//, '').replace(/\\/g, '/').replace(/\/+/g, '/').toLowerCase();
     }
 
+    function buildUiState() {
+      return {
+        tree_collapsed: Array.from(treeCollapsed),
+        source_collapsed: Array.from(sourceCollapsed),
+        tree_scroll: els.tree ? els.tree.scrollTop : 0,
+        source_scroll: els.source ? els.source.scrollTop : 0,
+        tree_anchor: buildTreeAnchor(),
+        source_anchor: buildSourceAnchor(),
+        last_depth_value: lastDepthValue,
+        last_depth_action: lastDepthAction
+      };
+    }
+
+    function findTreeElementByFile(file) {
+      const info = findNodeByFile(file);
+      if (info && info.node && info.node.id) {
+        const el = document.querySelector(`#tree li.node[data-id="${CSS.escape(info.node.id)}"]`);
+        if (el) return el;
+      }
+      const normalized = normalizePath(file || '');
+      if (!normalized) return null;
+      const all = Array.from(document.querySelectorAll('#tree li.node[data-file]'));
+      return all.find(el => normalizePath(el.dataset.file || '') === normalized) || null;
+    }
+
+    function findFolderByDirPath(dirPath) {
+      const target = normalizePath(dirPath || '');
+      if (!target) return null;
+      let hit = null;
+      const walk = (nodes, segs) => {
+        for (const node of (nodes || [])) {
+          if (!node || node.type !== 'folder') continue;
+          const selfSeg = String((node.segment || '')).trim();
+          const nextSegs = selfSeg ? segs.concat([selfSeg]) : segs;
+          if (nextSegs.length) {
+            const joined = normalizePath(nextSegs.join('/'));
+            if (joined === target) {
+              hit = node;
+              return;
+            }
+          }
+          if (Array.isArray(node.children)) walk(node.children, nextSegs);
+          if (hit) return;
+        }
+      };
+      walk(stateTree, []);
+      if (!hit || !hit.id) return null;
+      return document.querySelector(`#tree li.node[data-id="${CSS.escape(hit.id)}"]`);
+    }
+
+    function findFolderByTitlePath(titlePath) {
+      const target = String(titlePath || '').trim();
+      if (!target) return null;
+      const parts = target.split('/').map(s => s.trim()).filter(Boolean);
+      if (!parts.length) return null;
+      let hit = null;
+      const walk = (nodes, titles) => {
+        for (const node of (nodes || [])) {
+          if (!node || node.type !== 'folder') continue;
+          const name = displayTitleForNode(node);
+          const nextTitles = titles.concat([name]);
+          if (nextTitles.join('/') === parts.join('/')) {
+            hit = node;
+            return;
+          }
+          if (Array.isArray(node.children)) walk(node.children, nextTitles);
+          if (hit) return;
+        }
+      };
+      walk(stateTree, []);
+      if (!hit || !hit.id) return null;
+      return document.querySelector(`#tree li.node[data-id="${CSS.escape(hit.id)}"]`);
+    }
+
+    function findTreeElementByAnchor(anchor) {
+      if (!anchor || typeof anchor !== 'object') return null;
+      if (anchor.type === 'page' && anchor.file) {
+        let path = String(anchor.file);
+        while (path) {
+          const el = findTreeElementByFile(path);
+          if (el) return el;
+          if (!path.includes('/')) break;
+          path = path.replace(/\/[^/]+$/, '');
+        }
+        return null;
+      }
+      if (anchor.type === 'folder') {
+        let dir = String(anchor.dir || '');
+        while (dir) {
+          const el = findFolderByDirPath(dir);
+          if (el) return el;
+          if (!dir.includes('/')) break;
+          dir = dir.replace(/\/[^/]+$/, '');
+        }
+        let titlePath = String(anchor.title_path || '');
+        while (titlePath) {
+          const el = findFolderByTitlePath(titlePath);
+          if (el) return el;
+          if (!titlePath.includes('/')) break;
+          titlePath = titlePath.replace(/\/[^/]+$/, '');
+        }
+      }
+      return null;
+    }
+
+    function findSourceElementByPath(path) {
+      const target = normalizePath(path || '');
+      if (!target) return null;
+      const all = Array.from(document.querySelectorAll('#source li.source-item[data-path]'));
+      return all.find(el => normalizePath(el.dataset.path || '') === target) || null;
+    }
+
+    function restoreTreeFromUiState() {
+      if (!pendingTreeRestore) return;
+      pendingTreeRestore = false;
+      if (uiState && uiState.tree_anchor) {
+        const el = findTreeElementByAnchor(uiState.tree_anchor);
+        if (el) {
+          el.scrollIntoView({ behavior: 'auto', block: 'center' });
+          return;
+        }
+      }
+      if (uiState && Number.isFinite(uiState.tree_scroll) && els.tree) {
+        els.tree.scrollTop = uiState.tree_scroll;
+      }
+    }
+
+    function restoreSourceFromUiState() {
+      if (!pendingSourceRestore) return;
+      pendingSourceRestore = false;
+      if (uiState && uiState.source_anchor) {
+        let path = String(uiState.source_anchor.path || '');
+        while (path) {
+          const el = findSourceElementByPath(path);
+          if (el) {
+            el.scrollIntoView({ behavior: 'auto', block: 'center' });
+            return;
+          }
+          if (!path.includes('/')) break;
+          path = path.replace(/\/[^/]+$/, '');
+        }
+      }
+      if (uiState && Number.isFinite(uiState.source_scroll) && els.source) {
+        els.source.scrollTop = uiState.source_scroll;
+      }
+    }
+
     function renderTree() {
       els.tree.innerHTML = '';
       dropLineEl = dropLineEl || document.createElement('div');
@@ -2591,7 +2841,8 @@
         hint.textContent = '(empty)';
         els.tree.appendChild(hint);
       }
-      restoreScrollPosition('page_tree_scroll_tree', els.tree);
+      if (pendingTreeRestore) restoreTreeFromUiState();
+      else restoreScrollPosition('page_tree_scroll_tree', els.tree);
     }
 
     function updateSelectionInfo() {
@@ -2759,6 +3010,7 @@
 
     function persistTreeCollapsed() {
       localStorage.setItem('page_tree_tree_collapsed', JSON.stringify(Array.from(treeCollapsed)));
+      scheduleUiStateSave();
     }
 
     function normalizeTreeCollapsed() {
@@ -2811,6 +3063,58 @@
       const title = displayTitleForNode(node);
       const tparts = parentTitles && parentTitles.length ? parentTitles.concat([title]) : [title];
       return `title:${tparts.join('/')}`;
+    }
+
+    function titlePathForId(id) {
+      if (!id) return '';
+      const info = findNode(stateTree, id);
+      if (!info || !info.node) return '';
+      const parts = [displayTitleForNode(info.node)];
+      let p = info.parent;
+      while (p) {
+        parts.push(displayTitleForNode(p));
+        const parentInfo = findNode(stateTree, p.id);
+        p = parentInfo ? parentInfo.parent : null;
+      }
+      return parts.reverse().join('/');
+    }
+
+    function getTopVisibleRow(container, selector) {
+      if (!container) return null;
+      const rect = container.getBoundingClientRect();
+      const rows = Array.from(container.querySelectorAll(selector));
+      for (const row of rows) {
+        const r = row.getBoundingClientRect();
+        if (r.bottom > rect.top + 6) return row;
+      }
+      return rows[0] || null;
+    }
+
+    function buildTreeAnchor() {
+      if (!els.tree) return null;
+      const row = getTopVisibleRow(els.tree, '.tree-row');
+      if (!row) return null;
+      const li = row.closest('li.node');
+      if (!li) return null;
+      const type = li.dataset.type || '';
+      if (type === 'page' && li.dataset.file) {
+        return { type: 'page', file: String(li.dataset.file) };
+      }
+      if (type === 'folder') {
+        const dir = folderDirForId(li.dataset.id || '');
+        const titlePath = titlePathForId(li.dataset.id || '');
+        return { type: 'folder', dir: dir || '', title_path: titlePath || '' };
+      }
+      return null;
+    }
+
+    function buildSourceAnchor() {
+      if (!els.source) return null;
+      const row = getTopVisibleRow(els.source, '.source-row');
+      if (!row) return null;
+      const li = row.closest('li.source-item');
+      if (!li || !li.dataset.path) return null;
+      return { path: String(li.dataset.path) };
     }
 
 	    function buildTreeList(nodes, isRoot = false, depth = 0, parentSegs = [], parentTitles = []) {

@@ -113,6 +113,31 @@ def _state_path() -> Path:
     return BASE_DIR / ".page_tree_state.json"
 
 
+def _ui_state_path() -> Path:
+    env = os.environ.get("UI_STATE_PATH")
+    if env:
+        p = Path(env)
+        return p if p.is_absolute() else (PROJECT_ROOT / p)
+    return BASE_DIR / ".page_tree_ui_state.json"
+
+
+def _load_ui_state() -> dict[str, Any]:
+    if not UI_STATE_PATH.exists():
+        return {}
+    try:
+        with UI_STATE_PATH.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_ui_state(payload: dict[str, Any]) -> None:
+    UI_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with UI_STATE_PATH.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, ensure_ascii=True)
+
+
 def _load_mkdocs_config(mkdocs: Path) -> CommentedMap:
     if not mkdocs.exists():
         return CommentedMap()
@@ -214,6 +239,7 @@ def _docs_root(mkdocs: Path) -> Path:
 
 MKDOCS_PATH = _mkdocs_path()
 STATE_PATH = _state_path()
+UI_STATE_PATH = _ui_state_path()
 DOCS_ROOT = _docs_root(MKDOCS_PATH)
 
 
@@ -1622,6 +1648,20 @@ def api_import():
 @app.route("/api/source", methods=["GET"])
 def api_source():
     return jsonify(_build_source_tree(DOCS_ROOT, DOCS_ROOT))
+
+
+@app.route("/api/ui_state", methods=["GET"])
+def api_get_ui_state():
+    return jsonify(_load_ui_state())
+
+
+@app.route("/api/ui_state", methods=["POST"])
+def api_save_ui_state():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return _json_error("Expected a JSON object.", 400)
+    _save_ui_state(payload)
+    return jsonify({"status": "ok"})
 
 
 @app.route("/api/sync", methods=["POST"])
