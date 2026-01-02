@@ -59,14 +59,14 @@
 
     <div id="tool-tooltip" class="tool-tooltip" hidden></div>
     <div id="tree-context" class="context-menu" hidden>
-      <button type="button" data-action="new-folder">🗂️ New Section</button>
-      <button type="button" data-action="new-page">📄 New Page</button>
-      <button type="button" data-action="new-page-with-folder">📁 Page w/ Folder</button>
-      <button type="button" data-action="rename">✏️ Rename</button>
-      <button type="button" data-action="delete" class="danger">🗑️ Delete</button>
-      <button type="button" data-action="locate">🧭 Locate</button>
-      <button type="button" data-action="open">🔎 Open</button>
-      <button type="button" data-action="edit">📝 Edit</button>
+      <button type="button" data-action="new-folder" data-shortcut="Opt(Alt)+Shift+N">🗂️ New Section <span class="context-shortcut">Opt(Alt)+Shift+N</span></button>
+      <button type="button" data-action="new-page" data-shortcut="Opt(Alt)+N">📄 New Page <span class="context-shortcut">Opt(Alt)+N</span></button>
+      <button type="button" data-action="new-page-with-folder" data-shortcut="Opt(Alt)+Shift+P">📁 Page w/ Folder <span class="context-shortcut">Opt(Alt)+Shift+P</span></button>
+      <button type="button" data-action="rename" data-shortcut="F2">✏️ Rename <span class="context-shortcut">F2</span></button>
+      <button type="button" data-action="locate" data-shortcut="Opt(Alt)+L">🧭 Locate <span class="context-shortcut">Opt(Alt)+L</span></button>
+      <button type="button" data-action="open" data-shortcut="Opt(Alt)+O">🔎 Open <span class="context-shortcut">Opt(Alt)+O</span></button>
+      <button type="button" data-action="edit" data-shortcut="Opt(Alt)+E">📝 Edit <span class="context-shortcut">Opt(Alt)+E</span></button>
+      <button type="button" data-action="delete" class="danger" data-shortcut="Del/Backspace">🗑️ Delete <span class="context-shortcut">Del/Backspace</span></button>
     </div>
 
     <section class="dock-tools tools-toolbar" id="panel-tools">
@@ -149,59 +149,27 @@
                 <button type="button" class="ghost depth-btn" data-depth="5" data-help="Show 5 levels">5</button>
                 <button type="button" class="ghost depth-btn" data-depth="n" data-help="Show all levels">∞</button>
               </div>
-              <button id="new-folder-btn" type="button" data-help="Create a new section under selection">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M2 4v8a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H8L6 2H3a1 1 0 0 0-1 1v1z" fill="#6AA9FF" stroke="#4A89DF" stroke-width="1.2"/>
-                  <path d="M8 7v4M6 9h4" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-                </svg>
-                New Section
+              <button id="new-folder-btn" type="button" data-help="Create a new section under selection" data-shortcut="Opt(Alt)+Shift+N">
+                🗂️ New Section
               </button>
-              <button id="new-page-btn" type="button" data-help="Create a new page under selection">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M3 2h7l3 3v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" fill="#50DC8C" stroke="#30BC6C" stroke-width="1.2"/>
-                  <path d="M10 2v3h3" stroke="#30BC6C" stroke-width="1.2" stroke-linejoin="round"/>
-                  <path d="M8 8v3M6.5 9.5h3" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-                </svg>
-                New Page
+              <button id="new-page-btn" type="button" data-help="Create a new page under selection" data-shortcut="Opt(Alt)+N">
+                📄 New Page
               </button>
               <button id="new-page-with-folder-btn" type="button"
-                data-help="Create a page (nav only) and store it inside a same-named folder on disk">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M2 4v8a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1H8L6 2H3a1 1 0 0 0-1 1v1z" fill="#A78BFA" stroke="#8B5CF6" stroke-width="1.2"/>
-                  <rect x="6" y="6" width="4" height="5" rx="0.5" fill="white"/>
-                  <line x1="7" y1="8" x2="9" y2="8" stroke="#A78BFA" stroke-width="0.8"/>
-                  <line x1="7" y1="9.5" x2="9" y2="9.5" stroke="#A78BFA" stroke-width="0.8"/>
-                </svg>
-                Page w/ Folder
+                data-help="Create a page (nav only) and store it inside a same-named folder on disk" data-shortcut="Opt(Alt)+Shift+P">
+                📁 Page w/ Folder
               </button>
-              <button id="delete-btn" type="button" data-help="Delete selected node (tree only)">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M3 5h10M5 5V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7v5M10 7v5M4 5l.5 8a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1L12 5" stroke="#FF6B6B" stroke-width="1.5" stroke-linecap="round"/>
-                </svg>
-                Delete
+              <button id="delete-btn" type="button" data-help="Delete selected node (tree only)" data-shortcut="Del/Backspace">
+                🗑️ Delete
               </button>
-              <button id="tree-locate-btn" type="button" class="ghost" data-help="Locate selection in Source">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <circle cx="7" cy="7" r="4" stroke="currentColor" stroke-width="1.5"/>
-                  <path d="M10 10l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  <circle cx="7" cy="7" r="1.5" fill="#FFB84D"/>
-                </svg>
-                Locate
+              <button id="tree-locate-btn" type="button" class="ghost" data-help="Locate selection in Source" data-shortcut="Opt(Alt)+L">
+                🧭 Locate
               </button>
-              <button id="open-file-btn" type="button" class="ghost" data-help="Open selected page in editor or default viewer">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M3 5h10M3 8h10M3 11h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  <rect x="2" y="2" width="12" height="12" rx="1" stroke="currentColor" stroke-width="1.5"/>
-                </svg>
-                Open
+              <button id="open-file-btn" type="button" class="ghost" data-help="Open selected page in editor or default viewer" data-shortcut="Opt(Alt)+O">
+                🔎 Open
               </button>
-              <button id="simple-edit-btn" type="button" class="ghost" data-help="Open selected page in Simple Edit">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M11.5 2.5l2 2-7 7-2.5.5.5-2.5 7-7z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                  <path d="M10 4l2 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                  <circle cx="11.5" cy="3.5" r="0.8" fill="#6AA9FF"/>
-                </svg>
-                Edit
+              <button id="simple-edit-btn" type="button" class="ghost" data-help="Open selected page in Simple Edit" data-shortcut="Opt(Alt)+E">
+                📝 Edit
               </button>
             </div>
           </div>
@@ -259,7 +227,7 @@
             <span id="simple-edit-file" class="muted"></span>
             <span id="simple-edit-diff" class="muted"></span>
             <button id="simple-edit-abort" type="button" class="ghost" data-help="Abort edit (discard changes)">⟲ Abort</button>
-            <button id="simple-edit-save" type="button" class="ghost" data-help="Save file">
+            <button id="simple-edit-save" type="button" class="ghost" data-help="Save file" data-shortcut="Ctrl/Cmd+S">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <rect x="2" y="2" width="12" height="12" rx="1.5" fill="#6AA9FF" stroke="#4A89DF" stroke-width="1.2"/>
                 <rect x="4" y="4" width="8" height="6" fill="white"/>
@@ -508,6 +476,60 @@
       });
       if (els.toggleTheme) els.toggleTheme.addEventListener('click', toggleTheme);
       if (els.rainbowToggleBtn) els.rainbowToggleBtn.addEventListener('click', toggleRainbowColors);
+
+      document.addEventListener('keydown', (e) => {
+        if (!e) return;
+        const target = e.target;
+        const tag = target && target.tagName ? target.tagName.toLowerCase() : '';
+        const isInput = !!(target && (target.isContentEditable || tag === 'input' || tag === 'textarea' || tag === 'select'));
+        const inModal = els.modal && !els.modal.hidden && els.modal.contains(target);
+        const meta = e.metaKey || e.ctrlKey;
+        const alt = e.altKey;
+        const shift = e.shiftKey;
+        const key = e.key || '';
+        const code = e.code || '';
+        const isSave = meta && (key.toLowerCase() === 's');
+
+        if (inModal || activeInlineEdit) return;
+        if (isInput && !(isSave && target === els.simpleEditInput)) return;
+
+        if (alt && shift && code === 'KeyN') {
+          e.preventDefault();
+          return createNode('folder');
+        }
+        if (alt && !shift && code === 'KeyN') {
+          e.preventDefault();
+          return createNode('page');
+        }
+        if (alt && shift && code === 'KeyP') {
+          e.preventDefault();
+          return createPageWithFolder();
+        }
+        if (key === 'F2') {
+          e.preventDefault();
+          return renameSelected();
+        }
+        if ((key === 'Delete' || key === 'Backspace') && !isInput) {
+          e.preventDefault();
+          return deleteSelected();
+        }
+        if (alt && code === 'KeyL') {
+          e.preventDefault();
+          return locateSelectedInSource();
+        }
+        if (alt && code === 'KeyO') {
+          e.preventDefault();
+          return openSelectedFile();
+        }
+        if (alt && code === 'KeyE') {
+          e.preventDefault();
+          return openSimpleEditorFromSelection();
+        }
+        if (isSave && els.simpleEditor && !els.simpleEditor.hidden) {
+          e.preventDefault();
+          return saveSimpleEditor();
+        }
+      });
 
       // Click tree panel background to deselect (go back to root)
       els.tree.addEventListener('click', (e) => {
@@ -1326,8 +1348,9 @@
       buttons.forEach(btn => {
         btn.addEventListener('mouseenter', (e) => {
           const text = btn.dataset.help || '';
+          const shortcut = btn.dataset.shortcut || '';
           setInfoHover(text);
-          showToolTip(text, e);
+          showToolTip(text, shortcut, e);
         });
         btn.addEventListener('mousemove', (e) => {
           moveToolTip(e);
@@ -1353,11 +1376,11 @@
 	      return scheduleAutoSync(reason, 'nav_only');
 	    }
 
-    function showToolTip(text, e) {
+    function showToolTip(text, shortcut, e) {
       if (!toolTipEl) return;
       const value = (text || '').trim();
       if (!value) return;
-      toolTipEl.textContent = value;
+      toolTipEl.textContent = shortcut ? `${value} (${shortcut})` : value;
       toolTipEl.hidden = false;
       moveToolTip(e);
     }

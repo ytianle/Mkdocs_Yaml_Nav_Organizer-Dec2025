@@ -841,11 +841,11 @@ body.is-resizing .splitter-h * {
   position: fixed;
   left: 0;
   top: 0;
-  min-width: 180px;
-  padding: 6px;
+  min-width: 150px;
+  padding: 4px;
   border-radius: 12px;
   border: 1px solid rgba(232, 238, 252, 0.14);
-  background: rgba(10, 16, 34, 0.95);
+  background: rgba(10, 16, 34, 0.45);
   backdrop-filter: blur(12px);
   box-shadow: 0 16px 30px rgba(0, 0, 0, 0.35);
   display: grid;
@@ -859,8 +859,18 @@ body.is-resizing .splitter-h * {
   width: 100%;
   justify-content: flex-start;
   gap: 8px;
-  font-size: 13px;
-  padding: 8px 10px;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+.context-shortcut {
+  margin-left: auto;
+  font-size: 11px;
+  color: rgba(232, 238, 252, 0.65);
+}
+
+body.theme-light .context-shortcut {
+  color: rgba(11, 18, 32, 0.55);
 }
 
 .context-menu button:disabled {
@@ -873,7 +883,7 @@ body.is-resizing .splitter-h * {
 
 body.theme-light .context-menu {
   border-color: rgba(10, 16, 34, 0.14);
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.35);
   box-shadow: 0 16px 30px rgba(10, 16, 34, 0.18);
 }
 
