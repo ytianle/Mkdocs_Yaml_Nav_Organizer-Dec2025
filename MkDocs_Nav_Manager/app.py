@@ -103,6 +103,17 @@ def _same_file_path(a: Path, b: Path) -> bool:
         return False
 
 
+def _is_protected_section(title: str | None) -> bool:
+    if not title:
+        return False
+    upper = str(title).strip().upper()
+    return upper in {"HOME", "JOURNAL"}
+
+
+def _has_protected_ancestor(ancestors: list["Node"]) -> bool:
+    return any(a.type == "folder" and _is_protected_section(a.title) for a in ancestors)
+
+
 def _mkdocs_path() -> Path:
     env = os.environ.get("MKDOCS_PATH") or os.environ.get("MKDOCS_FILE")
     if env:
@@ -372,6 +383,10 @@ def _infer_segments_in_place(nodes: list[Node], parent_prefix: str = "") -> None
     for node in nodes:
         if node.type != "folder":
             continue
+        if _is_protected_section(node.title):
+            node.segment = ""
+            _infer_segments_in_place(node.children or [], parent_prefix)
+            continue
         inferred = _infer_segment_from_children(node, parent_prefix)
         if inferred:
             node.segment = inferred
@@ -620,7 +635,11 @@ def _collect_desired_folder_dirs(nodes: list["Node"]) -> set[str]:
         for node in items:
             if node.type != "folder":
                 continue
-            segs = [a.segment for a in (ancestors + [node]) if a.type == "folder" and a.segment]
+            segs = [
+                a.segment
+                for a in (ancestors + [node])
+                if a.type == "folder" and a.segment and not _is_protected_section(a.title)
+            ]
             rel = "/".join(segs)
             if rel:
                 desired.add(rel)
@@ -654,12 +673,12 @@ def _cleanup_stray_empty_dirs(root: Path, *, keep_rel_dirs: set[str]) -> None:
 
 
 def _compute_folder_dir(ancestors: list[Node]) -> str:
-    segments = [a.segment for a in ancestors if a.type == "folder" and a.segment]
+    segments = [a.segment for a in ancestors if a.type == "folder" and a.segment and not _is_protected_section(a.title)]
     return "/".join(segments)
 
 
 def _plan_file_sync(
-    nodes: list[Node], *, create_missing: bool
+    nodes: list[Node], *, create_missing: bool, preserve_page_dirs: bool
 ) -> tuple[
     list[tuple[Path, Path]],
     list[tuple[Path, Path]],
@@ -681,35 +700,38 @@ def _plan_file_sync(
         used_rel.add(desired_rel)
         return desired_rel
 
-    entries: list[tuple[Node, list[Node], str, str]] = []
+    entries: list[tuple[Node, list[Node], str, str, bool]] = []
 
     def collect(items: list[Node], ancestors: list[Node]):
         folder_dir = _compute_folder_dir(ancestors)
+        protected = _has_protected_ancestor(ancestors)
         for node in items:
             if node.type == "folder":
                 collect(node.children or [], ancestors + [node])
                 continue
             basename = Path(node.file).name if node.file else f"{_slugify(node.title)}.md"
-            desired_rel = f"{folder_dir}/{basename}" if folder_dir else basename
-            desired_rel = _safe_rel_path(desired_rel)
+            desired_rel_default = f"{folder_dir}/{basename}" if folder_dir else basename
+            desired_rel_default = _safe_rel_path(desired_rel_default)
             # If a user renamed a file in the editor, prefer the previous path as the source for moving.
-            current_rel = _safe_rel_path(node.file_prev) if node.file_prev else (_safe_rel_path(node.file) if node.file else desired_rel)
-            entries.append((node, list(ancestors), current_rel, desired_rel))
+            current_rel = _safe_rel_path(node.file_prev) if node.file_prev else (_safe_rel_path(node.file) if node.file else desired_rel_default)
+            if protected:
+                desired_rel = current_rel
+            elif preserve_page_dirs and node.file:
+                desired_rel = _safe_rel_path(node.file)
+            else:
+                desired_rel = desired_rel_default
+            entries.append((node, list(ancestors), current_rel, desired_rel, protected))
 
     collect(nodes, [])
 
     # Precompute all sources that will be used for the plan (to avoid false collisions when swapping/moving).
-    for node, _anc, current_rel, desired_rel in entries:
+    for node, _anc, current_rel, desired_rel, _protected in entries:
         src = DOCS_ROOT / current_rel
         if src.exists():
             planned_sources.add(src.resolve())
-            # Sibling asset folder is also a source that may move.
-            src_assets = src.with_suffix("")
-            if src_assets.exists() and src_assets.is_dir():
-                planned_sources.add(src_assets.resolve())
 
     # Preflight: detect collisions before mutating node paths or moving files.
-    for node, _anc, current_rel, desired_rel in entries:
+    for node, _anc, current_rel, desired_rel, _protected in entries:
         try:
             desired_rel = _safe_rel_path(desired_rel)
         except Exception as exc:
@@ -729,14 +751,14 @@ def _plan_file_sync(
 
     used_rel = set()
 
-    def apply(entries_in: list[tuple[Node, list[Node], str, str]]):
-        for node, ancestors, current_rel, desired_rel in entries_in:
+    def apply(entries_in: list[tuple[Node, list[Node], str, str, bool]]):
+        for node, ancestors, current_rel, desired_rel, protected in entries_in:
             src = DOCS_ROOT / current_rel
             unique_rel = _unique_rel(desired_rel)
             dst = DOCS_ROOT / unique_rel
             if not src.exists():
                 warnings.append({"type": "missing_file", "file": current_rel, "title": node.title})
-                if create_missing:
+                if create_missing and not protected:
                     _create_missing_page(unique_rel, node.title)
                     node.file = unique_rel
                     node.file_prev = None
@@ -746,11 +768,6 @@ def _plan_file_sync(
 
             if src != dst and not _same_file_path(src, dst):
                 page_moves.append((src, dst))
-                # Confluence-like "relative sync": also move a sibling asset folder named after the stem.
-                src_assets = src.with_suffix("")  # page.md -> page
-                dst_assets = dst.with_suffix("")
-                if src_assets.exists() and src_assets.is_dir():
-                    asset_moves.append((src_assets, dst_assets))
             node.file = unique_rel
             node.file_prev = None
 
@@ -774,6 +791,17 @@ def _apply_moves(moves: list[tuple[Path, Path]]) -> list[dict[str, str]]:
         applied.append({"from": src.relative_to(DOCS_ROOT).as_posix(), "to": dst.relative_to(DOCS_ROOT).as_posix()})
     _cleanup_empty_dirs(sources, DOCS_ROOT)
     return applied
+
+
+def _preflight_moves(moves: list[tuple[Path, Path]]) -> list[dict[str, str]]:
+    errors: list[dict[str, str]] = []
+    for src, dst in moves:
+        if not src.exists():
+            errors.append({"type": "missing_source", "from": src.relative_to(DOCS_ROOT).as_posix()})
+            continue
+        if dst.exists() and not _same_file_path(src, dst):
+            errors.append({"type": "target_exists", "to": dst.relative_to(DOCS_ROOT).as_posix()})
+    return errors
 
 
 def _collect_pages_under(nodes: Iterable[Node]) -> list[Node]:
@@ -829,10 +857,11 @@ def _plan_partial_sync(nodes: list[Node], moved_ids: set[str]) -> tuple[list[tup
     planned_sources: set[Path] = set()
     used_rel: set[str] = set()
 
-    entries: list[tuple[Node, str, str]] = []
+    entries: list[tuple[Node, str, str, bool]] = []
 
     def walk(items: list[Node], ancestors: list[Node], under_moved: bool):
         folder_dir = _compute_folder_dir(ancestors)
+        protected = _has_protected_ancestor(ancestors)
         for node in items:
             is_under = under_moved or (node.id in moved_ids)
             if node.type == "folder":
@@ -843,20 +872,20 @@ def _plan_partial_sync(nodes: list[Node], moved_ids: set[str]) -> tuple[list[tup
             if not node.file:
                 continue
             basename = Path(node.file).name
-            desired_rel = f"{folder_dir}/{basename}" if folder_dir else basename
-            desired_rel = _safe_rel_path(desired_rel)
             current_rel = _safe_rel_path(node.file_prev) if node.file_prev else _safe_rel_path(node.file)
-            entries.append((node, current_rel, desired_rel))
+            if protected:
+                desired_rel = current_rel
+            else:
+                desired_rel = f"{folder_dir}/{basename}" if folder_dir else basename
+                desired_rel = _safe_rel_path(desired_rel)
+            entries.append((node, current_rel, desired_rel, protected))
 
     walk(nodes, [], False)
 
-    for node, current_rel, _ in entries:
+    for node, current_rel, _desired_rel, _protected in entries:
         src = DOCS_ROOT / current_rel
         if src.exists():
             planned_sources.add(src.resolve())
-            src_assets = src.with_suffix("")
-            if src_assets.exists() and src_assets.is_dir():
-                planned_sources.add(src_assets.resolve())
 
     def _unique_rel(desired_rel: str) -> str:
         desired_rel = _safe_rel_path(desired_rel)
@@ -865,7 +894,7 @@ def _plan_partial_sync(nodes: list[Node], moved_ids: set[str]) -> tuple[list[tup
         used_rel.add(desired_rel)
         return desired_rel
 
-    for node, current_rel, desired_rel in entries:
+    for node, current_rel, desired_rel, _protected in entries:
         try:
             desired_rel = _safe_rel_path(desired_rel)
         except Exception as exc:
@@ -879,18 +908,13 @@ def _plan_partial_sync(nodes: list[Node], moved_ids: set[str]) -> tuple[list[tup
         dst = DOCS_ROOT / desired_rel
         if dst.exists() and not _same_file_path(src, dst) and dst.resolve() not in planned_sources:
             collisions.append({"type": "exists", "target": desired_rel, "title": node.title})
-        src_assets = src.with_suffix("")
-        dst_assets = dst.with_suffix("")
-        if src_assets.exists() and src_assets.is_dir() and dst_assets.exists():
-            if not _same_file_path(src_assets, dst_assets) and dst_assets.resolve() not in planned_sources:
-                collisions.append({"type": "exists", "target": dst_assets.relative_to(DOCS_ROOT).as_posix(), "title": node.title})
 
     if collisions:
         return [], [], collisions
 
     used_rel = set()
 
-    for node, current_rel, desired_rel in entries:
+    for node, current_rel, desired_rel, _protected in entries:
         src = DOCS_ROOT / current_rel
         if not src.exists():
             continue
@@ -902,13 +926,6 @@ def _plan_partial_sync(nodes: list[Node], moved_ids: set[str]) -> tuple[list[tup
             continue
 
         page_moves.append((src, dst))
-        src_assets = src.with_suffix("")
-        dst_assets = dst.with_suffix("")
-        if src_assets.exists() and src_assets.is_dir():
-            if dst_assets.exists() and dst_assets.resolve() != src_assets.resolve() and dst_assets.resolve() not in planned_sources:
-                collisions.append({"type": "exists", "target": dst_assets.relative_to(DOCS_ROOT).as_posix(), "title": node.title})
-            else:
-                asset_moves.append((src_assets, dst_assets))
         node.file = unique_rel
         node.file_prev = None
 
@@ -1690,10 +1707,16 @@ def api_sync():
     moves_applied: list[dict[str, str]] = []
 
     if mode == "sync_files":
-        page_moves, asset_moves, plan_warnings, collisions = _plan_file_sync(nodes, create_missing=create_missing)
+        preserve_page_dirs = bool(payload.get("preserve_page_dirs", False))
+        page_moves, asset_moves, plan_warnings, collisions = _plan_file_sync(
+            nodes, create_missing=create_missing, preserve_page_dirs=preserve_page_dirs
+        )
         warnings.extend(plan_warnings)
         if collisions:
             return _json_error("File move blocked: target already exists.", 409, collisions=collisions)
+        preflight_errors = _preflight_moves(page_moves + asset_moves)
+        if preflight_errors:
+            return _json_error("File move blocked: preflight failed.", 409, errors=preflight_errors)
         try:
             moves_applied.extend(_apply_moves(page_moves))
             moves_applied.extend(_apply_moves(asset_moves))
@@ -1750,6 +1773,9 @@ def api_sync_drag_files():
     page_moves, asset_moves, collisions = _plan_partial_sync(nodes, moved_ids)
     if collisions:
         return _json_error("File move blocked: target already exists.", 409, collisions=collisions)
+    preflight_errors = _preflight_moves(page_moves + asset_moves)
+    if preflight_errors:
+        return _json_error("File move blocked: preflight failed.", 409, errors=preflight_errors)
 
     moves_applied: list[dict[str, str]] = []
     try:

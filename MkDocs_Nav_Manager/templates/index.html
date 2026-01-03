@@ -2299,10 +2299,14 @@
       }
       if (!silent) setStatus('Syncing...', 'info');
       try {
+        const payload = { mode, tree: stateTree };
+        if (opts.payload && typeof opts.payload === 'object') {
+          Object.assign(payload, opts.payload);
+        }
         const data = await fetchJson('/api/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode, tree: stateTree })
+          body: JSON.stringify(payload)
         });
         const moves = Array.isArray(data.moves) ? data.moves : [];
         const warnings = Array.isArray(data.warnings) ? data.warnings : [];
@@ -4184,7 +4188,12 @@
               const base = node.is_overview
                 ? overviewBasenameForNode(node)
                 : `${formatNameByDepth(node.title, depth, 'page')}${fileExtForNode(node)}`;
-              const rel = parentSegments.length ? `${parentSegments.join('/')}/${base}` : base;
+              const currentRel = String(node.file || '').replace(/^\.\//, '');
+              const slashAt = currentRel.lastIndexOf('/');
+              const currentDir = slashAt >= 0 ? currentRel.slice(0, slashAt) : '';
+              const parentDir = parentSegments.join('/');
+              const targetDir = currentDir || parentDir;
+              const rel = targetDir ? `${targetDir}/${base}` : base;
               if (node.file !== rel) node.file = rel;
             }
           }
@@ -4196,7 +4205,7 @@
       renderTree();
       updateHistoryButtons();
       setStatus('Normalizing and syncing files...', 'info');
-      await sync('sync_files', { confirm: false, silent: false });
+      await sync('sync_files', { confirm: false, silent: false, payload: { preserve_page_dirs: true } });
     }
 
     function beginInlineEdit(id, field, hostEl) {
