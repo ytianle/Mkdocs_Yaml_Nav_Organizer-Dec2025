@@ -96,6 +96,13 @@ def _safe_rel_path(rel: str) -> str:
     return rel
 
 
+def _same_file_path(a: Path, b: Path) -> bool:
+    try:
+        return a.exists() and b.exists() and os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
 def _mkdocs_path() -> Path:
     env = os.environ.get("MKDOCS_PATH") or os.environ.get("MKDOCS_FILE")
     if env:
@@ -667,36 +674,12 @@ def _plan_file_sync(
     planned_targets: set[Path] = set()
     used_rel: set[str] = set()
 
-    def _unique_rel(desired_rel: str, *, src: Path, all_sources: set[Path]) -> str:
+    def _unique_rel(desired_rel: str) -> str:
         desired_rel = _safe_rel_path(desired_rel)
-        dst = DOCS_ROOT / desired_rel
-        # Allow "existing target" when it's the same file as src, or when the existing file
-        # is a source that will be moved away by this plan.
-        if desired_rel not in used_rel and (
-            (not dst.exists())
-            or (dst.resolve() == src.resolve())
-            or (dst.resolve() in all_sources)
-        ):
-            used_rel.add(desired_rel)
-            return desired_rel
-
-        parent = Path(desired_rel).parent.as_posix()
-        base = Path(desired_rel).name
-        stem = Path(base).stem
-        suffix = Path(base).suffix
-        i = 2
-        while True:
-            cand_base = f"{stem}-{i}{suffix}"
-            cand_rel = f"{parent}/{cand_base}" if parent and parent != "." else cand_base
-            cand_rel = _safe_rel_path(cand_rel)
-            if cand_rel in used_rel:
-                i += 1
-                continue
-            cand_path = DOCS_ROOT / cand_rel
-            if not cand_path.exists():
-                used_rel.add(cand_rel)
-                return cand_rel
-            i += 1
+        if desired_rel in used_rel:
+            raise ValueError(f"Duplicate target: {desired_rel}")
+        used_rel.add(desired_rel)
+        return desired_rel
 
     entries: list[tuple[Node, list[Node], str, str]] = []
 
@@ -725,12 +708,31 @@ def _plan_file_sync(
             if src_assets.exists() and src_assets.is_dir():
                 planned_sources.add(src_assets.resolve())
 
+    # Preflight: detect collisions before mutating node paths or moving files.
+    for node, _anc, current_rel, desired_rel in entries:
+        try:
+            desired_rel = _safe_rel_path(desired_rel)
+        except Exception as exc:
+            collisions.append({"type": "invalid_target", "target": desired_rel, "title": node.title, "error": str(exc)})
+            continue
+        if desired_rel in used_rel:
+            collisions.append({"type": "duplicate_target", "target": desired_rel, "title": node.title})
+            continue
+        used_rel.add(desired_rel)
+        src = DOCS_ROOT / current_rel
+        dst = DOCS_ROOT / desired_rel
+        if dst.exists() and not _same_file_path(src, dst) and dst.resolve() not in planned_sources:
+            collisions.append({"type": "exists", "target": desired_rel, "title": node.title})
+
+    if collisions:
+        return [], [], warnings, collisions
+
+    used_rel = set()
+
     def apply(entries_in: list[tuple[Node, list[Node], str, str]]):
         for node, ancestors, current_rel, desired_rel in entries_in:
             src = DOCS_ROOT / current_rel
-            unique_rel = _unique_rel(desired_rel, src=src, all_sources=planned_sources)
-            if unique_rel != desired_rel:
-                warnings.append({"type": "filename_collision", "from": desired_rel, "to": unique_rel, "title": node.title})
+            unique_rel = _unique_rel(desired_rel)
             dst = DOCS_ROOT / unique_rel
             if not src.exists():
                 warnings.append({"type": "missing_file", "file": current_rel, "title": node.title})
@@ -742,7 +744,7 @@ def _plan_file_sync(
 
             planned_targets.add(dst.resolve())
 
-            if src != dst:
+            if src != dst and not _same_file_path(src, dst):
                 page_moves.append((src, dst))
                 # Confluence-like "relative sync": also move a sibling asset folder named after the stem.
                 src_assets = src.with_suffix("")  # page.md -> page
@@ -754,10 +756,8 @@ def _plan_file_sync(
 
     apply(entries)
 
-    # Collisions are now resolved by auto-renaming targets; we keep the return shape for API stability.
-
     _ensure_unique_targets(page_moves + asset_moves)
-    return page_moves, asset_moves, warnings, []
+    return page_moves, asset_moves, warnings, collisions
 
 
 def _apply_moves(moves: list[tuple[Path, Path]]) -> list[dict[str, str]]:
@@ -858,42 +858,45 @@ def _plan_partial_sync(nodes: list[Node], moved_ids: set[str]) -> tuple[list[tup
             if src_assets.exists() and src_assets.is_dir():
                 planned_sources.add(src_assets.resolve())
 
-    def _unique_rel(desired_rel: str, *, src: Path, all_sources: set[Path]) -> str:
+    def _unique_rel(desired_rel: str) -> str:
         desired_rel = _safe_rel_path(desired_rel)
-        dst = DOCS_ROOT / desired_rel
-        if desired_rel not in used_rel and (
-            (not dst.exists())
-            or (dst.resolve() == src.resolve())
-            or (dst.resolve() in all_sources)
-        ):
-            used_rel.add(desired_rel)
-            return desired_rel
+        if desired_rel in used_rel:
+            raise ValueError(f"Duplicate target: {desired_rel}")
+        used_rel.add(desired_rel)
+        return desired_rel
 
-        parent = Path(desired_rel).parent.as_posix()
-        base = Path(desired_rel).name
-        stem = Path(base).stem
-        suffix = Path(base).suffix
-        i = 2
-        while True:
-            cand_base = f"{stem}-{i}{suffix}"
-            cand_rel = f"{parent}/{cand_base}" if parent and parent != "." else cand_base
-            cand_rel = _safe_rel_path(cand_rel)
-            if cand_rel in used_rel:
-                i += 1
-                continue
-            cand_path = DOCS_ROOT / cand_rel
-            if not cand_path.exists():
-                used_rel.add(cand_rel)
-                return cand_rel
-            i += 1
+    for node, current_rel, desired_rel in entries:
+        try:
+            desired_rel = _safe_rel_path(desired_rel)
+        except Exception as exc:
+            collisions.append({"type": "invalid_target", "target": desired_rel, "title": node.title, "error": str(exc)})
+            continue
+        if desired_rel in used_rel:
+            collisions.append({"type": "duplicate_target", "target": desired_rel, "title": node.title})
+            continue
+        used_rel.add(desired_rel)
+        src = DOCS_ROOT / current_rel
+        dst = DOCS_ROOT / desired_rel
+        if dst.exists() and not _same_file_path(src, dst) and dst.resolve() not in planned_sources:
+            collisions.append({"type": "exists", "target": desired_rel, "title": node.title})
+        src_assets = src.with_suffix("")
+        dst_assets = dst.with_suffix("")
+        if src_assets.exists() and src_assets.is_dir() and dst_assets.exists():
+            if not _same_file_path(src_assets, dst_assets) and dst_assets.resolve() not in planned_sources:
+                collisions.append({"type": "exists", "target": dst_assets.relative_to(DOCS_ROOT).as_posix(), "title": node.title})
+
+    if collisions:
+        return [], [], collisions
+
+    used_rel = set()
 
     for node, current_rel, desired_rel in entries:
         src = DOCS_ROOT / current_rel
         if not src.exists():
             continue
-        unique_rel = _unique_rel(desired_rel, src=src, all_sources=planned_sources)
+        unique_rel = _unique_rel(desired_rel)
         dst = DOCS_ROOT / unique_rel
-        if src.resolve() == dst.resolve():
+        if _same_file_path(src, dst):
             node.file = unique_rel
             node.file_prev = None
             continue

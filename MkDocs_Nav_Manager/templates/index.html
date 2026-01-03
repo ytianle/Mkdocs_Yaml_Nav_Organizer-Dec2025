@@ -2056,6 +2056,76 @@
       els.infoHover.textContent = value;
     }
 
+    function clearInfoErrors() {
+      if (!els.infoErrors) return;
+      els.infoErrors.hidden = true;
+      els.infoErrors.textContent = '';
+    }
+
+    function showSyncWarnings(warnings) {
+      if (!els.infoErrors || !els.infoDetails) return;
+      if (!Array.isArray(warnings) || !warnings.length) {
+        clearInfoErrors();
+        return;
+      }
+      const parts = [];
+      parts.push(`Sync warnings (${warnings.length})`);
+      for (const warn of warnings) {
+        if (!warn || typeof warn !== 'object') continue;
+        const kind = warn.type || 'warning';
+        const details = [];
+        const order = ['title', 'file', 'from', 'to', 'target', 'path', 'error'];
+        for (const key of order) {
+          if (warn[key] != null && String(warn[key]).trim() !== '') {
+            details.push(`${key}=${warn[key]}`);
+          }
+        }
+        for (const key of Object.keys(warn)) {
+          if (key === 'type' || order.includes(key)) continue;
+          if (warn[key] != null && String(warn[key]).trim() !== '') {
+            details.push(`${key}=${warn[key]}`);
+          }
+        }
+        parts.push(`- ${kind}${details.length ? ' ' + details.join(' ') : ''}`);
+      }
+      els.infoErrors.hidden = false;
+      els.infoErrors.textContent = parts.join('\n');
+      els.infoDetails.open = true;
+    }
+
+    function showSyncErrors(message, details) {
+      if (!els.infoErrors || !els.infoDetails) return;
+      const parts = [];
+      if (message) parts.push(String(message));
+      if (Array.isArray(details) && details.length) {
+        parts.push(`Details (${details.length})`);
+        for (const item of details) {
+          if (!item || typeof item !== 'object') {
+            parts.push(`- ${String(item)}`);
+            continue;
+          }
+          const kind = item.type || 'error';
+          const info = [];
+          const order = ['title', 'file', 'from', 'to', 'target', 'path', 'error'];
+          for (const key of order) {
+            if (item[key] != null && String(item[key]).trim() !== '') {
+              info.push(`${key}=${item[key]}`);
+            }
+          }
+          for (const key of Object.keys(item)) {
+            if (key === 'type' || order.includes(key)) continue;
+            if (item[key] != null && String(item[key]).trim() !== '') {
+              info.push(`${key}=${item[key]}`);
+            }
+          }
+          parts.push(`- ${kind}${info.length ? ' ' + info.join(' ') : ''}`);
+        }
+      }
+      els.infoErrors.hidden = false;
+      els.infoErrors.textContent = parts.join('\n');
+      els.infoDetails.open = true;
+    }
+
     function shortenPathLine(line) {
       if (!line) return '';
       const parts = line.split('|').map(s => s.trim()).filter(Boolean);
@@ -2239,6 +2309,7 @@
         const extra = moves.length ? ` moved:${moves.length}` : '';
         const warn = warnings.length ? ` warnings:${warnings.length}` : '';
         if (!silent) setStatus(`Sync ok.${extra}${warn}`, warnings.length ? 'info' : 'success');
+        showSyncWarnings(warnings);
         await loadState({ reset: false, silentStatus: silent });
         await loadSource();
         lastPersistedSignature = treeSignature(stateTree);
@@ -2247,11 +2318,13 @@
         if (data && Array.isArray(data.collisions) && data.collisions.length) {
           setStatus(`Sync blocked: file name conflict (${data.collisions.length}). No changes applied.`, 'error');
           pushDebug('sync.blocked', { collisions: data.collisions });
+          showSyncErrors('Sync blocked: file name conflict.', data.collisions);
           await loadState({ reset: true, silentStatus: silent });
           await loadSource();
           return;
         }
         setStatus(e.message || 'Sync failed.', 'error');
+        showSyncErrors(e.message || 'Sync failed.', data && data.errors ? data.errors : null);
       }
     }
 
@@ -3664,7 +3737,12 @@
     }
 
     function titleTokens(text) {
-      const cleaned = String(text || '').trim().replace(/['"]+/g, '');
+      let cleaned = String(text || '').trim().replace(/['"]+/g, '');
+      cleaned = cleaned.replace(/c\+\+/gi, ' cpp ');
+      cleaned = cleaned.replace(/c#/gi, ' csharp ');
+      cleaned = cleaned.replace(/\+\+/g, ' plus plus ');
+      cleaned = cleaned.replace(/\+/g, ' plus ');
+      cleaned = cleaned.replace(/#/g, ' sharp ');
       const tokens = cleaned.split(/[^0-9A-Za-z]+/g).filter(Boolean);
       return tokens;
     }
@@ -4188,6 +4266,10 @@
             current.hostEl.textContent = current.prevText;
             return;
           }
+          if (value === String(current.originalValue || '')) {
+            current.hostEl.textContent = current.prevText;
+            return;
+          }
           withHistory('edit.title', () => {
             const nodeInfo = findNode(stateTree, current.id);
             if (nodeInfo) nodeInfo.node.title = value;
@@ -4207,6 +4289,10 @@
           }
           const oldDir = folderDirForId(current.id);
           const newSeg = value.trim();
+          if (newSeg === String(current.originalValue || '').trim()) {
+            current.hostEl.textContent = current.prevText;
+            return;
+          }
           (async () => {
             setStatus('Renaming folder...', 'info');
             try {
@@ -4243,6 +4329,11 @@
           }
           const oldFile = String(current.originalValue || '').replace(/^\.\//, '').trim();
           const newBase = value.trim();
+          const oldBase = oldFile.split('/').pop() || '';
+          if (newBase === oldBase) {
+            current.hostEl.textContent = current.prevText;
+            return;
+          }
           if (!oldFile) {
             setStatus('Cannot rename: missing old file path.', 'error');
             return;
