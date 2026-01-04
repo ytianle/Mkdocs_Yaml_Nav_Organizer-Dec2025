@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import sys
+import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
@@ -78,6 +79,16 @@ def _backup_file(path: Path) -> Path | None:
 def _slugify(text: str) -> str:
     slug = re.sub(r"[^0-9A-Za-z._-]+", "-", (text or "").strip().lower()).strip("-")
     return slug or "section"
+
+
+def _snakeify(text: str) -> str:
+    cleaned = unicodedata.normalize("NFKC", str(text or "")).strip()
+    cleaned = re.sub(r"c\+\+", " cpp ", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"c#", " csharp ", cleaned, flags=re.IGNORECASE)
+    cleaned = cleaned.replace("++", " plus plus ").replace("+", " plus ").replace("#", " sharp ")
+    cleaned = re.sub(r"[^\w]+", "_", cleaned, flags=re.UNICODE)
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    return cleaned.lower() or "item"
 
 
 def _normalize_rel(path: str) -> str:
@@ -1263,7 +1274,7 @@ def api_create_page_with_folder():
     if not title:
         return _json_error("`title` is required.", 400)
 
-    folder_seg = _slugify(title)
+    folder_seg = _snakeify(title)
     file_base = f"{folder_seg}.md"
 
     folder_rel = f"{parent_dir}/{folder_seg}" if parent_dir else folder_seg
@@ -1513,7 +1524,7 @@ def api_create_section():
     desired = str(payload.get("segment") or "").strip()
     if desired and ("/" in desired or "\\" in desired):
         return _json_error("Invalid segment.", 400)
-    segment = _slugify(desired or title)
+    segment = _snakeify(desired or title)
     segment = _unique_child_name(parent_path, segment)
     created = parent_path / segment
     created.mkdir(parents=True, exist_ok=False)
@@ -1541,7 +1552,7 @@ def api_create_page():
     desired = str(payload.get("basename") or "").strip()
     if desired and ("/" in desired or "\\" in desired):
         return _json_error("Invalid filename.", 400)
-    base = desired or f"{_slugify(title)}.md"
+    base = desired or f"{_snakeify(title)}.md"
     if not base.lower().endswith(".md"):
         base = f"{base}.md"
     base = _unique_child_name(parent_path, base)

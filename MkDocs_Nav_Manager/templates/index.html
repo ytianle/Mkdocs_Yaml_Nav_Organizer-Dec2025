@@ -64,7 +64,7 @@
       <button type="button" data-action="new-page-with-folder" data-shortcut="Opt(Alt)+Shift+P">📁 Page w/ Folder <span class="context-shortcut">Opt(Alt)+Shift+P</span></button>
       <button type="button" data-action="rename" data-shortcut="F2">✏️ Rename <span class="context-shortcut">F2</span></button>
       <button type="button" data-action="locate" data-shortcut="Opt(Alt)+L">🧭 Locate <span class="context-shortcut">Opt(Alt)+L</span></button>
-      <button type="button" data-action="open" data-shortcut="Opt(Alt)+O">🔎 Open <span class="context-shortcut">Opt(Alt)+O</span></button>
+      <button type="button" data-action="open" data-shortcut="Opt(Alt)+O">📂 Open <span class="context-shortcut">Opt(Alt)+O</span></button>
       <button type="button" data-action="edit" data-shortcut="Opt(Alt)+E">📝 Edit <span class="context-shortcut">Opt(Alt)+E</span></button>
       <button type="button" data-action="delete" class="danger" data-shortcut="Del/Backspace">🗑️ Delete <span class="context-shortcut">Del/Backspace</span></button>
     </div>
@@ -109,7 +109,6 @@
           <div class="card-head">
             <h2>Source</h2>
             <div class="inline-actions">
-              <span class="muted">Click to locate in tree</span>
               <button id="source-view-btn" type="button" class="ghost"
                 data-help="Toggle source view (Explorer / ASCII)">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -127,55 +126,66 @@
 	        <section class="card panel" id="panel-tree">
             <div class="card-head">
               <h2>📚 Doc Tree</h2>
-              <div class="inline-actions">
-	              <label class="switch" title="" data-help="" id="drag-mode-switch">
-	                <input id="drag-mode-toggle" type="checkbox" aria-label="Drag mode toggle">
-	                <span class="switch-track"></span>
-	                <span class="switch-text" id="drag-mode-text">Drag: Files</span>
-	              </label>
-	              <button id="rainbow-toggle-btn" type="button" class="ghost" data-help="Toggle rainbow level colors">
-	                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-	                  <path d="M2 10a6 6 0 0 1 12 0" stroke="#FF6B6B" stroke-width="1.5" stroke-linecap="round"/>
-	                  <path d="M3.5 10a4.5 4.5 0 0 1 9 0" stroke="#FFB84D" stroke-width="1.5" stroke-linecap="round"/>
-	                  <path d="M5 10a3 3 0 0 1 6 0" stroke="#50DC8C" stroke-width="1.5" stroke-linecap="round"/>
-	                  <path d="M6.5 10a1.5 1.5 0 0 1 3 0" stroke="#6AA9FF" stroke-width="1.5" stroke-linecap="round"/>
-	                </svg>
-	              </button>
-              <div class="segmented" role="group" aria-label="Depth actions">
-	                <button type="button" class="ghost depth-btn" data-depth="1" data-help="Collapse to 1 level">1</button>
-	                <button type="button" class="ghost depth-btn" data-depth="2" data-help="Collapse to 2 levels">2</button>
-	                <button type="button" class="ghost depth-btn" data-depth="3" data-help="Collapse to 3 levels">3</button>
-                <button type="button" class="ghost depth-btn" data-depth="4" data-help="Collapse to 4 levels">4</button>
-                <button type="button" class="ghost depth-btn" data-depth="5" data-help="Collapse to 5 levels">5</button>
-                <button type="button" class="ghost depth-btn" data-depth="n" data-help="Expand all / collapse to last depth">∞</button>
+              <div class="inline-actions tree-actions">
+                <div class="tree-actions-row">
+	                <label class="switch" title="" data-help="" id="drag-mode-switch">
+	                  <input id="drag-mode-toggle" type="checkbox" aria-label="Drag mode toggle">
+	                  <span class="switch-track"></span>
+	                  <span class="switch-text" id="drag-mode-text">Drag: Files</span>
+	                </label>
+	                <button id="rainbow-toggle-btn" type="button" class="ghost" data-help="Toggle rainbow level colors">
+	                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+	                    <path d="M2 10a6 6 0 0 1 12 0" stroke="#FF6B6B" stroke-width="1.5" stroke-linecap="round"/>
+	                    <path d="M3.5 10a4.5 4.5 0 0 1 9 0" stroke="#FFB84D" stroke-width="1.5" stroke-linecap="round"/>
+	                    <path d="M5 10a3 3 0 0 1 6 0" stroke="#50DC8C" stroke-width="1.5" stroke-linecap="round"/>
+	                    <path d="M6.5 10a1.5 1.5 0 0 1 3 0" stroke="#6AA9FF" stroke-width="1.5" stroke-linecap="round"/>
+	                  </svg>
+	                </button>
+                <div class="segmented" role="group" aria-label="Depth actions">
+	                  <button type="button" class="ghost depth-btn" data-depth="1" data-help="Collapse to 1 level">1</button>
+	                  <button type="button" class="ghost depth-btn" data-depth="2" data-help="Collapse to 2 levels">2</button>
+	                  <button type="button" class="ghost depth-btn" data-depth="3" data-help="Collapse to 3 levels">3</button>
+                  <button type="button" class="ghost depth-btn" data-depth="4" data-help="Collapse to 4 levels">4</button>
+                  <button type="button" class="ghost depth-btn" data-depth="5" data-help="Collapse to 5 levels">5</button>
+                  <button type="button" class="ghost depth-btn" data-depth="n" data-help="Expand all / collapse to last depth">∞</button>
+                </div>
+                <div class="tree-search" role="search">
+                  <input id="tree-search-input" type="text" autocomplete="off" placeholder="Search tree..." aria-label="Search doc tree">
+                  <span id="tree-search-count" class="tree-search-count" aria-live="polite"></span>
+                  <button id="tree-search-prev" type="button" class="ghost" data-help="Previous match (Shift+Enter)" aria-label="Previous match">Prev</button>
+                  <button id="tree-search-next" type="button" class="ghost" data-help="Next match (Enter)" aria-label="Next match">Next</button>
+                  <button id="tree-search-clear" type="button" class="ghost" data-help="Clear search" aria-label="Clear search">X</button>
+                </div>
+                </div>
+                <div class="tree-actions-row">
+                  <button id="new-folder-btn" type="button" data-help="Create a new section under selection" data-shortcut="Opt(Alt)+Shift+N">
+                    🗂️ New Section
+                  </button>
+                  <button id="new-page-btn" type="button" data-help="Create a new page under selection" data-shortcut="Opt(Alt)+N">
+                    📄 New Page
+                  </button>
+                  <button id="new-page-with-folder-btn" type="button"
+                    data-help="Create a page (nav only) and store it inside a same-named folder on disk" data-shortcut="Opt(Alt)+Shift+P">
+                    📁 Page w/ Folder
+                  </button>
+                  <button id="normalize-names-btn" type="button" class="ghost"
+                    data-help="Normalize file/folder names to lower_snake; keep subfolders, skip HOME/JOURNAL, allow CJK">
+                    🔤 Normalize Files
+                  </button>
+                  <button id="delete-btn" type="button" data-help="Delete selected node (tree only)" data-shortcut="Del/Backspace">
+                    🗑️ Delete
+                  </button>
+                  <button id="tree-locate-btn" type="button" class="ghost" data-help="Locate selection in Source" data-shortcut="Opt(Alt)+L">
+                    🧭 Locate
+                  </button>
+                  <button id="open-file-btn" type="button" class="ghost" data-help="Open selected page in editor or default viewer" data-shortcut="Opt(Alt)+O">
+                    📂 Open
+                  </button>
+                  <button id="simple-edit-btn" type="button" class="ghost" data-help="Open selected page in Simple Edit" data-shortcut="Opt(Alt)+E">
+                    📝 Edit
+                  </button>
+                </div>
               </div>
-              <button id="new-folder-btn" type="button" data-help="Create a new section under selection" data-shortcut="Opt(Alt)+Shift+N">
-                🗂️ New Section
-              </button>
-              <button id="new-page-btn" type="button" data-help="Create a new page under selection" data-shortcut="Opt(Alt)+N">
-                📄 New Page
-              </button>
-              <button id="new-page-with-folder-btn" type="button"
-                data-help="Create a page (nav only) and store it inside a same-named folder on disk" data-shortcut="Opt(Alt)+Shift+P">
-                📁 Page w/ Folder
-              </button>
-              <button id="normalize-names-btn" type="button" class="ghost"
-                data-help="Normalize file/folder names to lower_snake; keep subfolders, skip HOME/JOURNAL, allow CJK">
-                🔤 Normalize Files
-              </button>
-              <button id="delete-btn" type="button" data-help="Delete selected node (tree only)" data-shortcut="Del/Backspace">
-                🗑️ Delete
-              </button>
-              <button id="tree-locate-btn" type="button" class="ghost" data-help="Locate selection in Source" data-shortcut="Opt(Alt)+L">
-                🧭 Locate
-              </button>
-              <button id="open-file-btn" type="button" class="ghost" data-help="Open selected page in editor or default viewer" data-shortcut="Opt(Alt)+O">
-                🔎 Open
-              </button>
-              <button id="simple-edit-btn" type="button" class="ghost" data-help="Open selected page in Simple Edit" data-shortcut="Opt(Alt)+E">
-                📝 Edit
-              </button>
-            </div>
           </div>
           <div id="tree" class="list-shell">Loading...</div>
         </section>
@@ -188,10 +198,6 @@
           <div class="card-head">
             <h2>ℹ️ Info</h2>
             <div class="inline-actions">
-              <span class="muted">Hover tools for hints</span>
-              <button id="status-expand-btn" type="button" class="ghost" data-help="Expand status history">
-                Expand
-              </button>
             </div>
           </div>
           <div class="list-shell info-body">
@@ -199,11 +205,13 @@
             <div class="info-pills">
               <div id="info-meta-pill" class="info-pill" title=""></div>
               <div id="info-selection-pill" class="info-pill" title=""></div>
+              <div id="info-search-pill" class="info-pill" title=""></div>
             </div>
             <details id="info-details" class="info-details">
               <summary class="info-summary">More</summary>
               <div id="info-meta" class="info-line"></div>
               <div id="info-selection" class="info-line"></div>
+              <div id="info-search" class="info-line"></div>
               <div id="info-errors" class="info-errors" hidden></div>
             </details>
             <div id="info-hover" class="info-hint" hidden></div>
@@ -317,6 +325,9 @@
     let showInfo = false;
     let theme = 'dark';
     let treeContextOpen = false;
+    let treeSearchQuery = '';
+    let treeSearchMatches = [];
+    let treeSearchIndex = -1;
     // Registry for one-time global handlers that clear the persistent located highlight
     let locatedClearHandlers = [];
     // Suppress clearing for a short window right after installing handlers
@@ -339,9 +350,10 @@
         infoHover: document.getElementById('info-hover'),
         infoSelection: document.getElementById('info-selection'),
 	        infoSelectionPill: document.getElementById('info-selection-pill'),
+        infoSearch: document.getElementById('info-search'),
+        infoSearchPill: document.getElementById('info-search-pill'),
 	        infoDetails: document.getElementById('info-details'),
         infoErrors: document.getElementById('info-errors'),
-        statusExpandBtn: document.getElementById('status-expand-btn'),
         sourceViewBtn: document.getElementById('source-view-btn'),
         newFolderBtn: document.getElementById('new-folder-btn'),
         newPageBtn: document.getElementById('new-page-btn'),
@@ -371,6 +383,11 @@
         toggleSimpleEditor: document.getElementById('toggle-simple-editor'),
         toggleTheme: document.getElementById('toggle-theme'),
         rainbowToggleBtn: document.getElementById('rainbow-toggle-btn'),
+        treeSearchInput: document.getElementById('tree-search-input'),
+        treeSearchCount: document.getElementById('tree-search-count'),
+        treeSearchPrev: document.getElementById('tree-search-prev'),
+        treeSearchNext: document.getElementById('tree-search-next'),
+        treeSearchClear: document.getElementById('tree-search-clear'),
         treeLocateBtn: document.getElementById('tree-locate-btn'),
         openFileBtn: document.getElementById('open-file-btn'),
         simpleEditBtn: document.getElementById('simple-edit-btn'),
@@ -417,6 +434,46 @@
         setStatus('Debug log copied.', 'info');
       });
 
+      if (els.panelInfo) {
+        els.panelInfo.addEventListener('dblclick', (e) => {
+          const target = e.target;
+          if (!target || !target.closest('.info-body')) return;
+          toggleStatusExpanded();
+        });
+      }
+      if (els.treeSearchInput) {
+        els.treeSearchInput.addEventListener('input', (e) => {
+          const value = e && e.target ? e.target.value : '';
+          refreshTreeSearch({ query: value, selectMatch: true });
+        });
+        els.treeSearchInput.addEventListener('keydown', (e) => {
+          const key = e.key || '';
+          if (key === 'Enter') {
+            e.preventDefault();
+            if (e.shiftKey) selectTreeSearchMatch(treeSearchIndex - 1);
+            else selectTreeSearchMatch(treeSearchIndex + 1);
+            return;
+          }
+          if (key === 'ArrowDown') {
+            e.preventDefault();
+            selectTreeSearchMatch(treeSearchIndex + 1);
+            return;
+          }
+          if (key === 'ArrowUp') {
+            e.preventDefault();
+            selectTreeSearchMatch(treeSearchIndex - 1);
+            return;
+          }
+          if (key === 'Escape') {
+            e.preventDefault();
+            clearTreeSearch();
+          }
+        });
+      }
+      if (els.treeSearchPrev) els.treeSearchPrev.addEventListener('click', () => selectTreeSearchMatch(treeSearchIndex - 1));
+      if (els.treeSearchNext) els.treeSearchNext.addEventListener('click', () => selectTreeSearchMatch(treeSearchIndex + 1));
+      if (els.treeSearchClear) els.treeSearchClear.addEventListener('click', clearTreeSearch);
+
       sourceView = localStorage.getItem('page_tree_source_view') || 'list';
       sourceCollapsed = new Set(JSON.parse(localStorage.getItem('page_tree_source_collapsed') || '[]'));
       els.sourceViewBtn.addEventListener('click', toggleSourceView);
@@ -453,6 +510,7 @@
       showInfo = localStorage.getItem('page_tree_show_info') !== 'false';
       initTheme();
       applyPanelVisibility();
+      initStatusExpanded();
       renderStatusHistory();
       if (els.status) {
         if (window.ResizeObserver) {
@@ -462,15 +520,6 @@
           window.addEventListener('resize', renderStatusHistory);
         }
       }
-      if (els.statusExpandBtn) {
-        els.statusExpandBtn.addEventListener('click', () => {
-          statusExpanded = !statusExpanded;
-          if (els.status) els.status.classList.toggle('is-expanded', statusExpanded);
-          els.statusExpandBtn.textContent = statusExpanded ? 'Collapse' : 'Expand';
-          renderStatusHistory();
-        });
-      }
-
       if (els.toggleTools) els.toggleTools.addEventListener('click', () => {
         showTools = !showTools;
         localStorage.setItem('page_tree_show_tools', String(showTools));
@@ -2025,6 +2074,16 @@
       renderStatusHistory();
     }
 
+    function setStatusExpanded(next) {
+      statusExpanded = !!next;
+      if (els.status) els.status.classList.toggle('is-expanded', statusExpanded);
+      renderStatusHistory();
+    }
+
+    function toggleStatusExpanded() {
+      setStatusExpanded(!statusExpanded);
+    }
+
     function setInfoMeta(text) {
       const value = (text || '').trim();
       if (els.infoMeta) els.infoMeta.textContent = value;
@@ -2044,6 +2103,35 @@
       }
     }
 
+    function setInfoSearch(text) {
+      const value = (text || '').trim();
+      if (els.infoSearch) els.infoSearch.textContent = value;
+      if (els.infoSearchPill && !value) {
+        els.infoSearchPill.textContent = '';
+        els.infoSearchPill.title = '';
+      }
+    }
+
+    function updateTreeSearchInfo() {
+      const query = String(treeSearchQuery || '').trim();
+      if (!query) {
+        setInfoSearch('');
+        if (els.treeSearchCount) els.treeSearchCount.textContent = '';
+        return;
+      }
+      const total = Array.isArray(treeSearchMatches) ? treeSearchMatches.length : 0;
+      const pos = total && treeSearchIndex >= 0 ? treeSearchIndex + 1 : 0;
+      const msg = total
+        ? `Search: ${total} matches (${pos}/${total}) | "${query}"`
+        : `Search: 0 matches | "${query}"`;
+      setInfoSearch(msg);
+      if (els.treeSearchCount) els.treeSearchCount.textContent = `${pos}/${total}`;
+      if (els.infoSearchPill) {
+        els.infoSearchPill.textContent = total ? `Search: ${pos}/${total}` : 'Search: 0/0';
+        els.infoSearchPill.title = msg;
+      }
+    }
+
     function setInfoHover(text) {
       if (!els.infoHover) return;
       const value = (text || '').trim();
@@ -2060,6 +2148,162 @@
       if (!els.infoErrors) return;
       els.infoErrors.hidden = true;
       els.infoErrors.textContent = '';
+    }
+
+    function normalizeSearchQuery(value) {
+      return String(value || '').trim().toLowerCase();
+    }
+
+    function buildSearchHaystack(node) {
+      if (!node) return '';
+      const parts = [
+        displayTitleForNode(node),
+        node.title || '',
+        node.segment || '',
+        node.file || '',
+      ];
+      return parts.join(' ').toLowerCase();
+    }
+
+    function collectTreeSearchMatches(query) {
+      const matches = [];
+      const needle = normalizeSearchQuery(query);
+      if (!needle) return matches;
+      const walk = (nodes) => {
+        for (const node of (nodes || [])) {
+          if (!node || !node.id) continue;
+          const hay = buildSearchHaystack(node);
+          if (hay.includes(needle)) matches.push(node.id);
+          if (node.type === 'folder' && Array.isArray(node.children)) walk(node.children);
+        }
+      };
+      walk(stateTree || []);
+      return matches;
+    }
+
+    function updateTreeSearchControls() {
+      const hasQuery = !!String(treeSearchQuery || '').trim();
+      const hasMatches = Array.isArray(treeSearchMatches) && treeSearchMatches.length > 0;
+      if (els.treeSearchPrev) els.treeSearchPrev.disabled = !hasMatches;
+      if (els.treeSearchNext) els.treeSearchNext.disabled = !hasMatches;
+      if (els.treeSearchClear) els.treeSearchClear.disabled = !hasQuery;
+    }
+
+    function refreshTreeSearch({ query, preserveIndex = false, selectMatch = false } = {}) {
+      const raw = typeof query === 'string' ? query : treeSearchQuery;
+      treeSearchQuery = raw;
+      const normalized = normalizeSearchQuery(raw);
+      if (!normalized) {
+        treeSearchMatches = [];
+        treeSearchIndex = -1;
+        applyTreeSearchHighlights();
+        updateTreeSearchInfo();
+        updateTreeSearchControls();
+        return;
+      }
+      const matches = collectTreeSearchMatches(normalized);
+      let nextIndex = -1;
+      if (preserveIndex && treeSearchIndex >= 0 && treeSearchIndex < treeSearchMatches.length) {
+        const currentId = treeSearchMatches[treeSearchIndex];
+        const idx = matches.indexOf(currentId);
+        if (idx >= 0) nextIndex = idx;
+      }
+      if (nextIndex < 0 && matches.length) nextIndex = 0;
+      treeSearchMatches = matches;
+      treeSearchIndex = nextIndex;
+      if (selectMatch && nextIndex >= 0) {
+        selectTreeSearchMatch(nextIndex);
+        return;
+      }
+      applyTreeSearchHighlights();
+      updateTreeSearchInfo();
+      updateTreeSearchControls();
+    }
+
+    function clearTreeSearch() {
+      if (els.treeSearchInput) els.treeSearchInput.value = '';
+      treeSearchQuery = '';
+      treeSearchMatches = [];
+      treeSearchIndex = -1;
+      applyTreeSearchHighlights();
+      updateTreeSearchInfo();
+      updateTreeSearchControls();
+    }
+
+    function selectTreeSearchMatch(index) {
+      if (!Array.isArray(treeSearchMatches) || treeSearchMatches.length === 0) {
+        treeSearchIndex = -1;
+        applyTreeSearchHighlights();
+        updateTreeSearchInfo();
+        updateTreeSearchControls();
+        return;
+      }
+      const total = treeSearchMatches.length;
+      const next = ((index % total) + total) % total;
+      treeSearchIndex = next;
+      const id = treeSearchMatches[next];
+      ensureTreeMatchVisible(id);
+      selectNode(id);
+      applyTreeSearchHighlights();
+      updateTreeSearchInfo();
+      updateTreeSearchControls();
+    }
+
+    function findNodePath(nodes, targetId, parentSegs = [], parentTitles = []) {
+      for (const node of (nodes || [])) {
+        const entry = { node, parentSegs, parentTitles };
+        if (node.id === targetId) return [entry];
+        if (node.type === 'folder' && Array.isArray(node.children)) {
+          const nextSegs = String((node.segment || '')).trim()
+            ? parentSegs.concat([String(node.segment).trim()])
+            : parentSegs;
+          const nextTitles = parentTitles.concat([displayTitleForNode(node)]);
+          const child = findNodePath(node.children, targetId, nextSegs, nextTitles);
+          if (child) return [entry, ...child];
+        }
+      }
+      return null;
+    }
+
+    function ensureTreeMatchVisible(id) {
+      if (!id) return;
+      const path = findNodePath(stateTree || [], id, [], []);
+      if (!path || path.length < 2) return;
+      let changed = false;
+      const ancestors = path.slice(0, -1);
+      for (const entry of ancestors) {
+        if (!entry || !entry.node || entry.node.type !== 'folder') continue;
+        const key = collapseKeyForNode(entry.node, entry.parentSegs, entry.parentTitles);
+        if (key && treeCollapsed.has(key)) {
+          treeCollapsed.delete(key);
+          changed = true;
+        }
+      }
+      if (changed) {
+        persistTreeCollapsed();
+        renderTree();
+      }
+    }
+
+    function applyTreeSearchHighlights() {
+      if (!els.tree) return;
+      document.querySelectorAll('#tree .search-hit, #tree .search-current').forEach(el => {
+        el.classList.remove('search-hit', 'search-current');
+      });
+      if (!Array.isArray(treeSearchMatches) || !treeSearchMatches.length) return;
+      for (const id of treeSearchMatches) {
+        const li = document.querySelector(`#tree li.node[data-id="${CSS.escape(id)}"]`);
+        if (li) li.classList.add('search-hit');
+        const slot = document.querySelector(`#tree .overview-inline[data-overview-id="${CSS.escape(id)}"]`);
+        if (slot) slot.classList.add('search-hit');
+      }
+      if (treeSearchIndex >= 0 && treeSearchIndex < treeSearchMatches.length) {
+        const currentId = treeSearchMatches[treeSearchIndex];
+        const li = document.querySelector(`#tree li.node[data-id="${CSS.escape(currentId)}"]`);
+        if (li) li.classList.add('search-current');
+        const slot = document.querySelector(`#tree .overview-inline[data-overview-id="${CSS.escape(currentId)}"]`);
+        if (slot) slot.classList.add('search-current');
+      }
     }
 
     function showSyncWarnings(warnings) {
@@ -2947,8 +3191,13 @@
         hint.textContent = '(empty)';
         els.tree.appendChild(hint);
       }
+      refreshTreeSearch({ preserveIndex: true, selectMatch: false });
       if (pendingTreeRestore) restoreTreeFromUiState();
       else restoreScrollPosition('page_tree_scroll_tree', els.tree);
+    }
+
+    function initStatusExpanded() {
+      setStatusExpanded(false);
     }
 
     function updateSelectionInfo() {

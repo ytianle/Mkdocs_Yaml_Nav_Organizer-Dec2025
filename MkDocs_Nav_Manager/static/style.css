@@ -114,7 +114,7 @@ button {
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 8px 10px;
+  padding: 6px 10px;
   cursor: pointer;
   transition: transform 0.06s ease, border-color 0.2s ease, background 0.2s ease;
 }
@@ -265,25 +265,83 @@ body.theme-light .card {
 .card-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   padding: 10px 12px 9px;
   border-bottom: 1px solid var(--border);
+  position: relative;
+  min-height: 32px;
 }
 
 .card-head h2 {
+  position: absolute;
+  top: 10px;
+  left: 12px;
   margin: 0;
   font-size: 14px;
   font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
 }
 
 .inline-actions {
+  margin-left: auto;
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+
+.tree-actions {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.tree-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.tree-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tree-search input {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  width: 160px;
+  outline: none;
+}
+
+.tree-search input::placeholder {
+  color: var(--muted);
+}
+
+.tree-search button {
+  padding: 4px 8px;
+  border-radius: 999px;
+}
+
+.tree-search-count {
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 34px;
+  text-align: right;
+}
+
 
 .switch {
   display: inline-flex;
@@ -367,13 +425,13 @@ body.theme-light .switch-text {
 }
 
 .inline-actions button {
-  padding: 7px 9px;
+  padding: 4px 7px;
   border-radius: 10px;
 }
 
 .toolbar .inline-actions button {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border-radius: 999px;
   display: inline-flex;
@@ -895,17 +953,19 @@ body.theme-light .context-menu {
   border-radius: 12px;
   background: rgba(17, 26, 51, 0.45);
   min-height: 38px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .status-box.is-expanded {
   white-space: pre-wrap;
   overflow: auto;
   text-overflow: clip;
-  max-height: 220px;
+  min-height: 120px;
+  max-height: 240px;
 }
+
 
 .status-box[data-type="success"] {
   border-color: rgba(51, 209, 122, 0.55);
@@ -1962,6 +2022,25 @@ body.theme-light .overview-empty {
 
 .tree-row:hover {
   background: rgba(255, 255, 255, 0.06);
+}
+
+.search-hit > .row {
+  background: rgba(255, 212, 91, 0.14);
+}
+
+.search-current > .row {
+  outline: 2px solid rgba(255, 212, 91, 0.6);
+  outline-offset: 2px;
+}
+
+.overview-inline.search-hit {
+  background: rgba(255, 212, 91, 0.14);
+  border-radius: 8px;
+}
+
+.overview-inline.search-current {
+  outline: 2px solid rgba(255, 212, 91, 0.6);
+  outline-offset: 2px;
 }
 
 .tree-twist {
