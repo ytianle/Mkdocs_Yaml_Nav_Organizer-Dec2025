@@ -2093,6 +2093,29 @@
       els.infoDetails.open = true;
     }
 
+    function showInfoDetails(title, lines) {
+      if (!els.infoErrors || !els.infoDetails) return;
+      if (!Array.isArray(lines) || !lines.length) {
+        clearInfoErrors();
+        return;
+      }
+      const parts = [];
+      if (title) parts.push(String(title));
+      for (const line of lines) {
+        if (line == null) continue;
+        const text = String(line).trim();
+        if (!text) continue;
+        parts.push(`- ${text}`);
+      }
+      if (parts.length <= (title ? 1 : 0)) {
+        clearInfoErrors();
+        return;
+      }
+      els.infoErrors.hidden = false;
+      els.infoErrors.textContent = parts.join('\n');
+      els.infoDetails.open = true;
+    }
+
     function showSyncErrors(message, details) {
       if (!els.infoErrors || !els.infoDetails) return;
       const parts = [];
@@ -4206,8 +4229,16 @@
             const newRel = targetDir ? `${targetDir}/${base}` : base;
             const newBase = newRel.split('/').pop() || base;
             const oldBase = currentRel.split('/').pop() || '';
-            if (newBase && oldBase && newBase !== oldBase) {
-              pagePlans.push({ id: node.id, targetDir, oldBase, newBase });
+            if (newRel && currentRel && newRel !== currentRel) {
+              pagePlans.push({
+                id: node.id,
+                targetDir,
+                oldBase,
+                newBase,
+                currentRel,
+                newRel,
+                needsRename: !!(newBase && oldBase && newBase !== oldBase)
+              });
             }
           }
         }
@@ -4250,11 +4281,11 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             dirs: folderPlans.map(p => ({ dir: p.oldDir, new_segment: p.newSeg })),
-            files: pagePlans.map(p => {
-              const dir = p.targetDir || '';
-              const oldFile = dir ? `${dir}/${p.oldBase}` : p.oldBase;
-              return { old_file: oldFile, new_basename: p.newBase };
-            })
+            files: pagePlans.map(p => ({
+              old_file: p.currentRel,
+              new_basename: p.newBase,
+              dir_after: p.targetDir || ''
+            }))
           })
         });
         const preErrors = preflight && Array.isArray(preflight.errors) ? preflight.errors : [];
@@ -4298,17 +4329,22 @@
       for (const plan of pagePlans) {
         const dir = plan.targetDir || '';
         const oldFile = dir ? `${dir}/${plan.oldBase}` : plan.oldBase;
+        const nodeInfo = findNode(stateTree, plan.id);
+        if (!nodeInfo || !nodeInfo.node) continue;
+        if (!plan.needsRename) {
+          // Folder rename only: update path in state without renaming on disk.
+          nodeInfo.node.file = plan.newRel || nodeInfo.node.file;
+          nodeInfo.node.file_prev = null;
+          continue;
+        }
         try {
           const data = await fetchJson('/api/rename_file', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ old_file: oldFile, new_basename: plan.newBase })
           });
-          const nodeInfo = findNode(stateTree, plan.id);
-          if (nodeInfo && nodeInfo.node) {
-            nodeInfo.node.file = data.file || (dir ? `${dir}/${plan.newBase}` : plan.newBase);
-            nodeInfo.node.file_prev = null;
-          }
+          nodeInfo.node.file = data.file || (dir ? `${dir}/${plan.newBase}` : plan.newBase);
+          nodeInfo.node.file_prev = null;
         } catch (e) {
           const msg = e && e.message ? e.message : 'Normalize failed (rename file).';
           const details = e && e.data ? [e.data] : [{ error: msg, file: oldFile, new_basename: plan.newBase }];
@@ -4323,7 +4359,31 @@
       applyFilePrevFromCurrent(stateTree, buildFileMap(beforeTree));
       renderTree();
       updateHistoryButtons();
-      setStatus('Normalized names on disk.', 'success');
+      const sectionChanges = [];
+      for (const plan of folderPlans) {
+        if (!plan.oldDir || !plan.newSeg) continue;
+        const parentDir = plan.oldDir.split('/').slice(0, -1).join('/');
+        const newDir = parentDir ? `${parentDir}/${plan.newSeg}` : plan.newSeg;
+        if (newDir && plan.oldDir && newDir !== plan.oldDir) {
+          sectionChanges.push(`section ${plan.oldDir} -> ${newDir}`);
+        }
+      }
+      const pageChanges = [];
+      for (const plan of pagePlans) {
+        if (!plan.currentRel || !plan.newRel) continue;
+        if (plan.currentRel === plan.newRel) continue;
+        pageChanges.push(`page ${plan.currentRel} -> ${plan.newRel}`);
+      }
+      const changes = sectionChanges.concat(pageChanges);
+      const maxDetails = 200;
+      const detailLines = changes.slice(0, maxDetails);
+      if (changes.length > maxDetails) {
+        detailLines.push(`... and ${changes.length - maxDetails} more`);
+      }
+      const sectionCount = sectionChanges.length;
+      const pageCount = pageChanges.length;
+      setStatus(`✅ Normalized ${sectionCount} section(s), ${pageCount} page(s).`, 'success');
+      showInfoDetails(`Normalize changes (${changes.length})`, detailLines);
       scheduleNavOnly('normalize.names');
     }
 

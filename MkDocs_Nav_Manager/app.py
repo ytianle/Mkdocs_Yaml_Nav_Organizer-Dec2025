@@ -1214,33 +1214,40 @@ def api_preflight_renames():
             continue
         old_file = str(item.get("old_file") or "").strip()
         new_basename = str(item.get("new_basename") or "").strip()
+        dir_after = str(item.get("dir_after") or "").strip().strip("/")
         if not old_file or not new_basename:
-            errors.append({"type": "invalid_file_plan", "old_file": old_file, "new_basename": new_basename})
+            errors.append({"type": "invalid_file_plan", "old_file": old_file, "new_basename": new_basename, "dir_after": dir_after})
             continue
         if "/" in new_basename or "\\" in new_basename:
-            errors.append({"type": "invalid_basename", "old_file": old_file, "new_basename": new_basename})
+            errors.append({"type": "invalid_basename", "old_file": old_file, "new_basename": new_basename, "dir_after": dir_after})
             continue
         try:
             old_path = _safe_docs_path(_safe_rel_path(old_file))
         except Exception as exc:
-            errors.append({"type": "invalid_file_path", "old_file": old_file, "new_basename": new_basename, "error": str(exc)})
+            errors.append({"type": "invalid_file_path", "old_file": old_file, "new_basename": new_basename, "dir_after": dir_after, "error": str(exc)})
             continue
         if not old_path.exists() or not old_path.is_file():
-            errors.append({"type": "missing_file", "old_file": old_file, "new_basename": new_basename})
+            errors.append({"type": "missing_file", "old_file": old_file, "new_basename": new_basename, "dir_after": dir_after})
             continue
         base = new_basename
         if "." not in Path(base).name:
             base = f"{base}{old_path.suffix}"
         if old_path.suffix.lower() == ".md" and not base.lower().endswith(".md"):
             base = f"{base}.md"
-        new_path = (old_path.parent / base).resolve()
+        target_parent = old_path.parent
+        if dir_after:
+            try:
+                target_parent = _safe_docs_path(_safe_rel_path(dir_after))
+            except Exception:
+                target_parent = old_path.parent
+        new_path = (target_parent / base).resolve()
         rel_target = new_path.relative_to(DOCS_ROOT).as_posix()
         if rel_target in seen_targets:
-            errors.append({"type": "duplicate_target", "target": rel_target, "old_file": old_file, "new_basename": new_basename})
+            errors.append({"type": "duplicate_target", "target": rel_target, "old_file": old_file, "new_basename": new_basename, "dir_after": dir_after})
             continue
         seen_targets.add(rel_target)
         if new_path.exists() and not _same_file_path(old_path, new_path):
-            errors.append({"type": "target_exists", "target": rel_target, "old_file": old_file, "new_basename": new_basename})
+            errors.append({"type": "target_exists", "target": rel_target, "old_file": old_file, "new_basename": new_basename, "dir_after": dir_after})
 
     return jsonify({"status": "ok", "errors": errors})
 
