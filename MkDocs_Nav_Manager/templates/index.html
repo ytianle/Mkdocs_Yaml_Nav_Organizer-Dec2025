@@ -3559,7 +3559,7 @@
             slot.dataset.title = overview && overview.title ? String(overview.title) : '';
             slot.dataset.file = overview && overview.file ? String(overview.file) : '';
             if ((selectedIds && selectedIds.has(overview.id)) || selectedId === overview.id) slot.classList.add('selected');
-            value.textContent = `./${String(overview.file).replace(/^\.\//, '')}`;
+            value.textContent = String(overview.file).replace(/^\.\//, '');
             slot.title = value.textContent;
             slot.addEventListener('dragstart', onDragStart);
             slot.addEventListener('dragend', onDragEnd);
@@ -3606,7 +3606,7 @@
           });
           row.appendChild(meta);
         } else {
-          meta.textContent = node.file ? `./${node.file}` : '';
+          meta.textContent = node.file ? String(node.file).replace(/^\.\//, '') : '';
           meta.addEventListener('dblclick', (e) => {
             e.stopPropagation();
             selectedId = li.dataset.id;

@@ -1355,7 +1355,7 @@ body.theme-light .source-name.kind-file {
   align-items: center;
   gap: 10px;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
 }
 
 .overview-inline {
@@ -1393,6 +1393,9 @@ body.theme-light .source-name.kind-file {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+  font-size: 11px;
 }
 
 .overview-inline.has-overview {
@@ -2061,7 +2064,8 @@ body.theme-light .overview-empty {
 .node-title {
   font-weight: 650;
   font-size: 13px;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
+  max-width: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2076,6 +2080,8 @@ body.theme-light .overview-empty {
   max-width: 50%;
   flex: 0 1 auto;
   min-width: 0;
+  direction: rtl;
+  text-align: left;
 }
 
 /* Non-rainbow mode: page selected with orange ants */
@@ -2368,8 +2374,16 @@ body.theme-light .debug-log {
     cursor: row-resize;
   }
 
+  .node-title {
+    flex: 0 0 auto;
+  }
+
   .node-meta {
     max-width: 45%;
+  }
+
+  .overview-label {
+    display: none;
   }
 }
 .md-line {
