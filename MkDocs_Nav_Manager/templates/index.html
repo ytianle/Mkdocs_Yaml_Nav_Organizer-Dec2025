@@ -12,10 +12,35 @@
   <div class="shell">
     <header class="toolbar">
       <div class="title">
-        <h1>MkDocs Nav Manager</h1>
-        <div id="meta" class="muted">Loading...</div>
+        <div class="title-row">
+          <h1>MkDocs Nav Manager</h1>
+        </div>
+        <div class="title-subline">
+          <div id="meta" class="muted">Loading...</div>
+          <div id="mkdocs-status" class="mkdocs-status" data-state="stopped">MkDocs: stopped</div>
+        </div>
       </div>
       <div class="inline-actions">
+        <div class="mkdocs-actions" aria-label="MkDocs controls">
+          <button id="mkdocs-start-btn" type="button" class="ghost mkdocs-control" data-help="Start mkdocs serve (livereload)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 4l6 4-6 4V4z"/>
+            </svg>
+          </button>
+          <button id="mkdocs-stop-btn" type="button" class="ghost mkdocs-control" data-help="Stop mkdocs serve">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+              <rect x="4" y="4" width="8" height="8" rx="1"/>
+            </svg>
+          </button>
+          <button id="mkdocs-open-btn" type="button" class="ghost mkdocs-control" data-help="Open MkDocs site in browser">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 10l4-4"/>
+              <path d="M7.5 5H11v3.5"/>
+              <rect x="3.2" y="3.2" width="9.6" height="9.6" rx="2"/>
+            </svg>
+          </button>
+        </div>
+        <span class="action-divider" aria-hidden="true">|</span>
         <button id="toggle-tools" type="button" class="ghost" data-help="Toggle Tools panel">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
             <path d="M3 4h10M3 8h10M3 12h10"/>
@@ -41,19 +66,36 @@
             <path d="M8 7v4M8 5v.5"/>
           </svg>
         </button>
+        <button id="tool-debug" type="button" class="ghost icon-button" data-help="Toggle debug window (DnD logs)"
+          aria-label="Toggle debug">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 4.5h4"/>
+            <path d="M5 6.5h6"/>
+            <path d="M5 9.5h6"/>
+            <path d="M6.5 12h3"/>
+            <path d="M4 7.5H2.5M11.9 7.5h1.6"/>
+            <path d="M4.4 11.6 3.3 12.7M11.6 11.6 12.7 12.7"/>
+            <path d="M5 6l-1.2-1M11 6l1.2-1"/>
+            <rect x="4" y="5" width="8" height="7" rx="3"/>
+          </svg>
+        </button>
+        <span class="action-divider" aria-hidden="true">|</span>
         <button id="toggle-simple-editor" type="button" class="ghost" data-help="simple md file editor">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
             <path d="M11.5 2.5l2 2-7 7-2.5.5.5-2.5 7-7z"/>
             <path d="M10 4l2 2"/>
           </svg>
         </button>
+        <span class="action-divider" aria-hidden="true">|</span>
         <button id="toggle-theme" type="button" class="ghost" data-help="Toggle theme (Day/Night)">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M8 2a6 6 0 1 0 4.2 10.2A5 5 0 1 1 3.8 3.8 6 6 0 0 0 8 2z"/>
+          <svg class="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M10.8 2.7a5.9 5.9 0 1 0 2.5 9.8A4.7 4.7 0 1 1 10.8 2.7z"/>
+          </svg>
+          <svg class="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="8" cy="8" r="3.2"/>
+            <path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3 3l1.4 1.4M11.6 11.6 13 13M3 13l1.4-1.4M11.6 4.4 13 3"/>
           </svg>
         </button>
-        <button id="tool-debug" type="button" class="ghost icon-button" data-help="Toggle debug window (DnD logs)"
-          aria-label="Toggle debug">🐞</button>
       </div>
     </header>
 
@@ -201,19 +243,31 @@
             </div>
           </div>
           <div class="list-shell info-body">
-            <div id="status" class="status-box" data-type="info"></div>
-            <div class="info-pills">
-              <div id="info-meta-pill" class="info-pill" title=""></div>
-              <div id="info-selection-pill" class="info-pill" title=""></div>
-              <div id="info-search-pill" class="info-pill" title=""></div>
+            <div class="info-grid">
+              <div class="info-col info-left">
+                <div class="info-top">
+                  <div id="status" class="status-box" data-type="info"></div>
+                  <div class="info-pills">
+                    <div id="info-meta-pill" class="info-pill" title=""></div>
+                    <div id="info-selection-pill" class="info-pill" title=""></div>
+                    <div id="info-search-pill" class="info-pill" title=""></div>
+                  </div>
+                </div>
+              </div>
+              <div class="info-col info-right">
+                <details id="mkdocs-monitor" class="info-details info-section">
+                  <summary class="info-summary">MkDocs Monitor</summary>
+                  <pre id="mkdocs-log" class="mkdocs-log"></pre>
+                </details>
+                <details id="info-details" class="info-details info-section">
+                  <summary class="info-summary">More</summary>
+                  <div id="info-meta" class="info-line"></div>
+                  <div id="info-selection" class="info-line"></div>
+                  <div id="info-search" class="info-line"></div>
+                  <div id="info-errors" class="info-errors" hidden></div>
+                </details>
+              </div>
             </div>
-            <details id="info-details" class="info-details">
-              <summary class="info-summary">More</summary>
-              <div id="info-meta" class="info-line"></div>
-              <div id="info-selection" class="info-line"></div>
-              <div id="info-search" class="info-line"></div>
-              <div id="info-errors" class="info-errors" hidden></div>
-            </details>
             <div id="info-hover" class="info-hint" hidden></div>
           </div>
         </section>
@@ -312,6 +366,10 @@
 		    let autoSyncTimer = null;
     let statusHistory = [];
     let statusExpanded = false;
+    let mkdocsStream = null;
+    let mkdocsLogLines = [];
+    const mkdocsLogLimit = 200;
+    let mkdocsLastState = '';
     let skipEmptyDeleteConfirmSession = false;
     let showChoice = async () => 'cancel';
     let showConfirm = async () => false;
@@ -336,6 +394,7 @@
 	    document.addEventListener('DOMContentLoaded', async () => {
       els = {
         meta: document.getElementById('meta'),
+        mkdocsStatus: document.getElementById('mkdocs-status'),
         status: document.getElementById('status'),
         source: document.getElementById('source'),
         tree: document.getElementById('tree'),
@@ -354,6 +413,8 @@
         infoSearchPill: document.getElementById('info-search-pill'),
 	        infoDetails: document.getElementById('info-details'),
         infoErrors: document.getElementById('info-errors'),
+        mkdocsMonitor: document.getElementById('mkdocs-monitor'),
+        mkdocsLog: document.getElementById('mkdocs-log'),
         sourceViewBtn: document.getElementById('source-view-btn'),
         newFolderBtn: document.getElementById('new-folder-btn'),
         newPageBtn: document.getElementById('new-page-btn'),
@@ -382,6 +443,9 @@
         toggleInfo: document.getElementById('toggle-info'),
         toggleSimpleEditor: document.getElementById('toggle-simple-editor'),
         toggleTheme: document.getElementById('toggle-theme'),
+        mkdocsStartBtn: document.getElementById('mkdocs-start-btn'),
+        mkdocsStopBtn: document.getElementById('mkdocs-stop-btn'),
+        mkdocsOpenBtn: document.getElementById('mkdocs-open-btn'),
         rainbowToggleBtn: document.getElementById('rainbow-toggle-btn'),
         treeSearchInput: document.getElementById('tree-search-input'),
         treeSearchCount: document.getElementById('tree-search-count'),
@@ -1245,6 +1309,50 @@
         setStatus('⚠️ Simple Edit opened. Select a page and click 🧾 Edit to load it.', 'info');
       });
 
+      if (els.mkdocsStartBtn) {
+        els.mkdocsStartBtn.addEventListener('click', async () => {
+          try {
+            const data = await fetchJson('/api/mkdocs/start', { method: 'POST' });
+            setMkdocsStatus(data);
+            setMkdocsLog(data);
+          } catch (e) {
+            setMkdocsStatus({ state: 'error', running: false, message: e.message || 'MkDocs start failed' });
+            setMkdocsLog({ logs: [e.message || 'MkDocs start failed'] });
+          }
+        });
+      }
+      if (els.mkdocsStopBtn) {
+        els.mkdocsStopBtn.addEventListener('click', async () => {
+          try {
+            const data = await fetchJson('/api/mkdocs/stop', { method: 'POST' });
+            setMkdocsStatus(data);
+            setMkdocsLog(data);
+          } catch (e) {
+            setMkdocsStatus({ state: 'error', running: false, message: e.message || 'MkDocs stop failed' });
+            setMkdocsLog({ logs: [e.message || 'MkDocs stop failed'] });
+          }
+        });
+      }
+      if (els.mkdocsOpenBtn) {
+        els.mkdocsOpenBtn.addEventListener('click', () => {
+          const url = 'http://127.0.0.1:8000/';
+          const screenLeft = Number.isFinite(window.screen?.availLeft) ? window.screen.availLeft : 0;
+          const screenTop = Number.isFinite(window.screen?.availTop) ? window.screen.availTop : 0;
+          const screenWidth = window.screen?.availWidth || window.innerWidth;
+          const screenHeight = window.screen?.availHeight || window.innerHeight;
+          const splitWidth = Math.max(520, Math.floor(screenWidth / 2));
+          const left = screenLeft + Math.max(0, screenWidth - splitWidth);
+          const features = `popup,width=${splitWidth},height=${screenHeight},left=${left},top=${screenTop},noopener`;
+          let win = null;
+          try { win = window.open(url, '_blank', features); } catch (e) { win = null; }
+          if (!win) {
+            window.open(url, '_blank', 'noopener');
+            return;
+          }
+          win.focus();
+        });
+      }
+
       if (els.simpleEditor) {
         const header = els.simpleEditor.querySelector('.card-head');
         let drag = null;
@@ -1296,6 +1404,8 @@
           clearSelection();
         }
       });
+
+      initMkdocsStream();
 
 	      dragMode = localStorage.getItem('page_tree_drag_mode') || 'sync_files';
 	      updateDragModeSwitch();
@@ -1374,7 +1484,6 @@
 
     function applyTheme() {
       document.body.classList.toggle('theme-light', theme === 'light');
-      if (els.toggleTheme) els.toggleTheme.textContent = theme === 'light' ? '☀️' : '🌙';
       pushDebug('theme.set', { theme });
     }
 
@@ -2055,6 +2164,106 @@
       return data;
     }
 
+    function setMkdocsStatus(data) {
+      if (!els.mkdocsStatus) return;
+      const state = data && typeof data.state === 'string' ? data.state : 'stopped';
+      const running = !!(data && data.running);
+      const message = data && typeof data.message === 'string' ? data.message : '';
+      const labelMap = {
+        stopped: 'stopped',
+        starting: 'rendering',
+        rendering: 'rendering',
+        ready: 'ready',
+        error: 'error'
+      };
+      const label = labelMap[state] || state;
+      const displayLabel = state === 'error' ? 'error' : (running ? label : 'stopped');
+      els.mkdocsStatus.textContent = `MkDocs: ${displayLabel}`;
+      els.mkdocsStatus.dataset.state = state === 'starting' ? 'rendering' : state;
+      els.mkdocsStatus.title = message || '';
+      if (els.mkdocsStartBtn) {
+        els.mkdocsStartBtn.disabled = running || state === 'error' && message.includes('not found');
+      }
+      if (els.mkdocsStopBtn) {
+        els.mkdocsStopBtn.disabled = !running;
+      }
+      if (state !== mkdocsLastState) {
+        mkdocsLastState = state;
+        const statusMap = {
+          starting: ['🚀 MkDocs starting…', 'info'],
+          rendering: ['🌀 MkDocs rendering…', 'info'],
+          ready: ['✅ MkDocs ready', 'success'],
+          error: ['❌ MkDocs error', 'error'],
+          stopped: ['🖲️ MkDocs stopped', 'info']
+        };
+        const entry = statusMap[state] || ['MkDocs status updated', 'info'];
+        setStatus(entry[0], entry[1]);
+      }
+    }
+
+    function setMkdocsLog(data) {
+      if (!els.mkdocsLog) return;
+      const logs = data && Array.isArray(data.logs) ? data.logs : [];
+      mkdocsLogLines = logs.slice(-mkdocsLogLimit);
+      const shouldStick = Math.abs(els.mkdocsLog.scrollHeight - els.mkdocsLog.scrollTop - els.mkdocsLog.clientHeight) < 8;
+      els.mkdocsLog.textContent = mkdocsLogLines.join('\n');
+      if (shouldStick) {
+        els.mkdocsLog.scrollTop = els.mkdocsLog.scrollHeight;
+      }
+    }
+
+    function appendMkdocsLog(line) {
+      if (!els.mkdocsLog) return;
+      const text = String(line || '').trim();
+      if (!text) return;
+      const shouldStick = Math.abs(els.mkdocsLog.scrollHeight - els.mkdocsLog.scrollTop - els.mkdocsLog.clientHeight) < 8;
+      mkdocsLogLines.push(text);
+      if (mkdocsLogLines.length > mkdocsLogLimit) mkdocsLogLines = mkdocsLogLines.slice(-mkdocsLogLimit);
+      els.mkdocsLog.textContent = mkdocsLogLines.join('\n');
+      if (shouldStick) {
+        els.mkdocsLog.scrollTop = els.mkdocsLog.scrollHeight;
+      }
+    }
+
+    function handleMkdocsEvent(raw) {
+      if (!raw) return;
+      if (raw.kind === 'snapshot') {
+        setMkdocsStatus(raw);
+        setMkdocsLog(raw);
+        return;
+      }
+      if (raw.kind === 'status') {
+        setMkdocsStatus(raw);
+        return;
+      }
+      if (raw.kind === 'log') {
+        appendMkdocsLog(raw.line);
+      }
+    }
+
+    function initMkdocsStream() {
+      if (mkdocsStream) return;
+      try {
+        mkdocsStream = new EventSource('/api/mkdocs/stream');
+      } catch (e) {
+        mkdocsStream = null;
+        return;
+      }
+      mkdocsStream.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data || '{}');
+          handleMkdocsEvent(data);
+        } catch (e) {
+          // ignore malformed events
+        }
+      };
+      mkdocsStream.onerror = () => {
+        if (mkdocsStream) mkdocsStream.close();
+        mkdocsStream = null;
+        setMkdocsStatus({ state: 'error', running: false, message: 'MkDocs stream disconnected' });
+      };
+    }
+
     function renderStatusHistory() {
       if (!els.status) return;
       if (statusExpanded) {
@@ -2088,16 +2297,41 @@
       const value = (text || '').trim();
       if (els.infoMeta) els.infoMeta.textContent = value;
       if (els.infoMetaPill) {
-        els.infoMetaPill.textContent = shortenPathLine(value);
-        els.infoMetaPill.title = value;
+        els.infoMetaPill.textContent = '';
+        els.infoMetaPill.title = '';
       }
+    }
+
+    function formatSelectionPill(value) {
+      const raw = (value || '').replace(/^Selection:\s*/i, '').trim();
+      if (!raw) return '';
+      if (raw.toLowerCase() === '(none)') return 'No selection';
+      if (/^\\d+\\s+items$/i.test(raw)) return raw;
+      const parts = raw.split('|').map(s => s.trim()).filter(Boolean);
+      if (!parts.length) return raw;
+      const kind = parts[0] || '';
+      let title = '';
+      let file = '';
+      for (const part of parts.slice(1)) {
+        if (!file && /^file:/i.test(part)) {
+          file = part.replace(/^file:\s*/i, '');
+          if (file.startsWith('./')) file = file.slice(2);
+          continue;
+        }
+        if (!title) title = part;
+      }
+      const fileBase = file ? (file.replace(/\\\\/g, '/').split('/').pop() || file) : '';
+      const out = [kind];
+      if (title) out.push(title);
+      if (fileBase) out.push(fileBase);
+      return out.join(' · ');
     }
 
     function setInfoSelection(text) {
       const value = (text || '').trim();
       if (els.infoSelection) els.infoSelection.textContent = value;
       if (els.infoSelectionPill) {
-        const short = value.replace(/^Selection:\\s*/i, '') || 'Selection: (none)';
+        const short = formatSelectionPill(value);
         els.infoSelectionPill.textContent = short;
         els.infoSelectionPill.title = value;
       }

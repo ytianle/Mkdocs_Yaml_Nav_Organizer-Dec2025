@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import atexit
 import json
 import os
+import queue
 import re
 import shutil
+import signal
 import subprocess
 import sys
+import threading
 import unicodedata
 from collections import Counter
 from dataclasses import dataclass
@@ -16,7 +20,7 @@ from string import Template
 from typing import Any, Iterable
 from uuid import uuid4
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, Response, stream_with_context
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
@@ -38,6 +42,183 @@ yaml.indent(mapping=2, sequence=2, offset=2)
 yaml.width = 4096
 
 ALLOWED_DOC_EXTS = {".md", ".markdown", ".mdx"}
+
+MKDOCS_LOCK = threading.RLock()
+MKDOCS_PROC: subprocess.Popen[str] | None = None
+MKDOCS_STATUS: dict[str, Any] = {
+    "state": "stopped",  # stopped | starting | rendering | ready | error
+    "running": False,
+    "message": "",
+}
+MKDOCS_LOGS: list[str] = []
+MKDOCS_LOG_LIMIT = 200
+MKDOCS_STOPPING = False
+MKDOCS_SUBSCRIBERS: list[queue.Queue[str]] = []
+
+
+def _mkdocs_broadcast(payload: dict[str, Any]) -> None:
+    data = f"data: {json.dumps(payload, ensure_ascii=True)}\n\n"
+    with MKDOCS_LOCK:
+        subscribers = list(MKDOCS_SUBSCRIBERS)
+    for q in subscribers:
+        try:
+            q.put_nowait(data)
+        except queue.Full:
+            continue
+
+
+def _mkdocs_set_status(state: str, *, running: bool | None = None, message: str | None = None) -> None:
+    changed = False
+    payload: dict[str, Any] | None = None
+    with MKDOCS_LOCK:
+        if MKDOCS_STATUS.get("state") != state:
+            changed = True
+        MKDOCS_STATUS["state"] = state
+        if running is not None:
+            if MKDOCS_STATUS.get("running") != running:
+                changed = True
+            MKDOCS_STATUS["running"] = running
+        if message is not None:
+            MKDOCS_STATUS["message"] = message
+        if changed or message:
+            payload = {"kind": "status", **MKDOCS_STATUS}
+    if payload:
+        _mkdocs_broadcast(payload)
+
+
+def _mkdocs_add_log(line: str) -> None:
+    text = (line or "").strip()
+    if not text:
+        return
+    with MKDOCS_LOCK:
+        MKDOCS_LOGS.append(text)
+        if len(MKDOCS_LOGS) > MKDOCS_LOG_LIMIT:
+            del MKDOCS_LOGS[: len(MKDOCS_LOGS) - MKDOCS_LOG_LIMIT]
+    _mkdocs_broadcast({"kind": "log", "line": text})
+
+
+def _mkdocs_parse_line(line: str) -> str | None:
+    low = line.lower()
+    if "error" in low or "traceback" in low:
+        return "error"
+    if "building documentation" in low or "rebuilding documentation" in low or "cleaning site directory" in low:
+        return "rendering"
+    if "documentation built" in low or "serving on" in low:
+        return "ready"
+    return None
+
+
+def _mkdocs_read_logs(proc: subprocess.Popen[str]) -> None:
+    global MKDOCS_PROC
+    try:
+        if proc.stdout:
+            for line in proc.stdout:
+                msg = line.strip()
+                if msg:
+                    _mkdocs_add_log(msg)
+                    state = _mkdocs_parse_line(msg)
+                    if state:
+                        _mkdocs_set_status(state, running=True, message=msg)
+                    else:
+                        with MKDOCS_LOCK:
+                            current = MKDOCS_STATUS.get("state", "rendering")
+                        _mkdocs_set_status(current, running=True, message=msg)
+    finally:
+        code = proc.poll()
+        with MKDOCS_LOCK:
+            stopping = MKDOCS_STOPPING
+            MKDOCS_STOPPING = False
+        if code not in (None, 0) and not stopping:
+            msg = f"mkdocs exited with code {code}"
+            _mkdocs_add_log(msg)
+            _mkdocs_set_status("error", running=False, message=msg)
+        else:
+            _mkdocs_add_log("mkdocs stopped")
+            _mkdocs_set_status("stopped", running=False, message="mkdocs stopped")
+        with MKDOCS_LOCK:
+            if MKDOCS_PROC is proc:
+                MKDOCS_PROC = None
+
+
+def _mkdocs_start() -> dict[str, Any]:
+    global MKDOCS_PROC
+    with MKDOCS_LOCK:
+        if MKDOCS_PROC and MKDOCS_PROC.poll() is None:
+            return _mkdocs_monitor()
+
+        try:
+            proc = subprocess.Popen(
+                ["mkdocs", "serve", "--livereload"],
+                cwd=str(MKDOCS_PATH.parent),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+        except FileNotFoundError:
+            msg = "mkdocs not found in PATH"
+            _mkdocs_add_log(msg)
+            _mkdocs_set_status("error", running=False, message=msg)
+            return _mkdocs_monitor()
+        except Exception as exc:
+            msg = f"Failed to start mkdocs: {exc}"
+            _mkdocs_add_log(msg)
+            _mkdocs_set_status("error", running=False, message=msg)
+            return _mkdocs_monitor()
+
+        MKDOCS_PROC = proc
+        _mkdocs_add_log("mkdocs starting")
+        _mkdocs_set_status("starting", running=True, message="mkdocs starting")
+        thread = threading.Thread(target=_mkdocs_read_logs, args=(proc,), daemon=True)
+        thread.start()
+        return _mkdocs_monitor()
+
+
+def _mkdocs_stop() -> dict[str, Any]:
+    global MKDOCS_PROC
+    with MKDOCS_LOCK:
+        proc = MKDOCS_PROC
+        MKDOCS_PROC = None
+        MKDOCS_STOPPING = True
+    if proc and proc.poll() is None:
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+    _mkdocs_add_log("mkdocs stopped")
+    _mkdocs_set_status("stopped", running=False, message="mkdocs stopped")
+    return _mkdocs_monitor()
+
+
+def _shutdown_handler(signum: int | None = None, frame: Any | None = None) -> None:
+    _mkdocs_stop()
+    if signum is not None:
+        os._exit(0)
+
+
+def _mkdocs_status() -> dict[str, Any]:
+    with MKDOCS_LOCK:
+        proc = MKDOCS_PROC
+        status = dict(MKDOCS_STATUS)
+    if proc and proc.poll() is not None:
+        _mkdocs_set_status("stopped", running=False, message="mkdocs stopped")
+        with MKDOCS_LOCK:
+            status = dict(MKDOCS_STATUS)
+    return status
+
+
+def _mkdocs_monitor() -> dict[str, Any]:
+    status = _mkdocs_status()
+    with MKDOCS_LOCK:
+        logs = list(MKDOCS_LOGS)
+    status["logs"] = logs
+    return status
+
+
+def _mkdocs_snapshot() -> dict[str, Any]:
+    snap = _mkdocs_monitor()
+    snap["kind"] = "snapshot"
+    return snap
 
 
 def _json_error(message: str, status: int = 400, **extra: Any):
@@ -1703,6 +1884,49 @@ def api_meta():
     )
 
 
+@app.route("/api/mkdocs/status", methods=["GET"])
+def api_mkdocs_status():
+    return jsonify(_mkdocs_status())
+
+
+@app.route("/api/mkdocs/monitor", methods=["GET"])
+def api_mkdocs_monitor():
+    return jsonify(_mkdocs_monitor())
+
+
+@app.route("/api/mkdocs/stream", methods=["GET"])
+def api_mkdocs_stream():
+    q: queue.Queue[str] = queue.Queue(maxsize=200)
+    with MKDOCS_LOCK:
+        MKDOCS_SUBSCRIBERS.append(q)
+
+    def _event_stream():
+        try:
+            yield f"data: {json.dumps(_mkdocs_snapshot(), ensure_ascii=True)}\n\n"
+            while True:
+                try:
+                    chunk = q.get(timeout=15)
+                    yield chunk
+                except queue.Empty:
+                    yield ": ping\n\n"
+        finally:
+            with MKDOCS_LOCK:
+                if q in MKDOCS_SUBSCRIBERS:
+                    MKDOCS_SUBSCRIBERS.remove(q)
+
+    return Response(stream_with_context(_event_stream()), mimetype="text/event-stream")
+
+
+@app.route("/api/mkdocs/start", methods=["POST"])
+def api_mkdocs_start():
+    return jsonify(_mkdocs_start())
+
+
+@app.route("/api/mkdocs/stop", methods=["POST"])
+def api_mkdocs_stop():
+    return jsonify(_mkdocs_stop())
+
+
 @app.route("/api/state", methods=["GET"])
 def api_get_state():
     tree = _load_state()
@@ -1897,4 +2121,7 @@ def api_sync_drag_files():
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    atexit.register(_shutdown_handler)
+    signal.signal(signal.SIGINT, _shutdown_handler)
+    signal.signal(signal.SIGTERM, _shutdown_handler)
+    app.run(debug=True, port=5001)
