@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import hashlib
 import json
 import os
 import queue
@@ -29,7 +30,9 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 
 BASE_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = BASE_DIR.parent
+DEFAULT_PROJECT_ROOT = BASE_DIR.parent
+PROJECT_CONFIG_PATH = BASE_DIR / ".project_root.json"
+PROJECT_ROOT = DEFAULT_PROJECT_ROOT
 
 app = Flask(
     __name__,
@@ -455,13 +458,46 @@ def _mkdocs_path() -> Path:
     return PROJECT_ROOT / "mkdocs.yml"
 
 
+def _load_project_root() -> tuple[Path, bool]:
+    """Return the saved project root, falling back to the app's parent directory."""
+    # An explicit environment setting remains the most specific configuration.
+    if os.environ.get("MKDOCS_PATH") or os.environ.get("MKDOCS_FILE"):
+        return DEFAULT_PROJECT_ROOT, False
+    try:
+        data = json.loads(PROJECT_CONFIG_PATH.read_text(encoding="utf-8"))
+        raw = data.get("root") if isinstance(data, dict) else None
+        if isinstance(raw, str) and raw.strip():
+            root = Path(raw).expanduser().resolve()
+            if root.is_dir():
+                return root, True
+    except (OSError, json.JSONDecodeError):
+        pass
+    return DEFAULT_PROJECT_ROOT, False
+
+
+def _save_project_root(root: Path | None) -> None:
+    if root is None:
+        try:
+            PROJECT_CONFIG_PATH.unlink()
+        except FileNotFoundError:
+            pass
+        return
+    PROJECT_CONFIG_PATH.write_text(
+        json.dumps({"root": str(root)}, indent=2, ensure_ascii=True) + "\n",
+        encoding="utf-8",
+    )
+
+
 def _state_path() -> Path:
     env = os.environ.get("STATE_PATH")
     if env:
         p = Path(env)
         return p if p.is_absolute() else (PROJECT_ROOT / p)
-    # Keep the draft inside the app folder so users can drop `page_tree_app/` into any project.
-    return BASE_DIR / ".page_tree_state.json"
+    # Keep drafts beside the app, while isolating each locked project from the others.
+    if PROJECT_ROOT == DEFAULT_PROJECT_ROOT:
+        return BASE_DIR / ".page_tree_state.json"
+    project_key = hashlib.sha256(str(PROJECT_ROOT).encode("utf-8")).hexdigest()[:16]
+    return BASE_DIR / ".page_tree_state" / f"{project_key}.json"
 
 
 def _ui_state_path() -> Path:
@@ -588,10 +624,27 @@ def _docs_root(mkdocs: Path) -> Path:
     return PROJECT_ROOT
 
 
+PROJECT_ROOT, PROJECT_ROOT_LOCKED = _load_project_root()
 MKDOCS_PATH = _mkdocs_path()
 STATE_PATH = _state_path()
 UI_STATE_PATH = _ui_state_path()
 DOCS_ROOT = _docs_root(MKDOCS_PATH)
+
+
+def _set_project_root(root: Path | None) -> None:
+    """Switch all project-scoped paths after validating a user-selected root."""
+    global PROJECT_ROOT, PROJECT_ROOT_LOCKED, MKDOCS_PATH, STATE_PATH, DOCS_ROOT
+    if root is None:
+        PROJECT_ROOT = DEFAULT_PROJECT_ROOT
+        PROJECT_ROOT_LOCKED = False
+        _save_project_root(None)
+    else:
+        PROJECT_ROOT = root.resolve()
+        PROJECT_ROOT_LOCKED = True
+        _save_project_root(PROJECT_ROOT)
+    MKDOCS_PATH = _mkdocs_path()
+    STATE_PATH = _state_path()
+    DOCS_ROOT = _docs_root(MKDOCS_PATH)
 
 
 def _new_id() -> str:
@@ -893,12 +946,17 @@ def _build_source_tree(current: Path, base: Path) -> list[dict[str, Any]]:
         if child.name.startswith("."):
             continue
         if child.is_dir():
+            nested = _build_source_tree(child, base)
+            # Source is a Markdown explorer. Hide directories (such as assets/)
+            # that contain no supported document anywhere below them.
+            if not nested:
+                continue
             entries.append(
                 {
                     "name": child.name,
                     "path": child.relative_to(base).as_posix(),
                     "kind": "dir",
-                    "children": _build_source_tree(child, base),
+                    "children": nested,
                 }
             )
             continue
@@ -933,6 +991,7 @@ def _save_state(nodes: list[Node]) -> None:
         "updated_at": datetime.now().isoformat(timespec="seconds"),
         "tree": [n.to_dict() for n in nodes],
     }
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
     STATE_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
@@ -2018,11 +2077,74 @@ def index() -> str:
 def api_meta():
     return jsonify(
         {
+            "project_root": str(PROJECT_ROOT),
+            "project_root_locked": PROJECT_ROOT_LOCKED,
             "mkdocs_path": str(MKDOCS_PATH),
             "docs_root": str(DOCS_ROOT),
             "state_path": str(STATE_PATH),
         }
     )
+
+
+@app.route("/api/project_root", methods=["POST"])
+def api_set_project_root():
+    """Persist a project root so this app can be kept outside MkDocs projects."""
+    if os.environ.get("MKDOCS_PATH") or os.environ.get("MKDOCS_FILE"):
+        return _json_error("Project root is controlled by MKDOCS_PATH/MKDOCS_FILE.", 409)
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return _json_error("Expected a JSON object.", 400)
+    raw_root = payload.get("root")
+    if raw_root is None or (isinstance(raw_root, str) and not raw_root.strip()):
+        _mkdocs_stop()
+        _set_project_root(None)
+    elif not isinstance(raw_root, str):
+        return _json_error("`root` must be a directory path.", 400)
+    else:
+        try:
+            root = Path(raw_root.strip()).expanduser().resolve()
+        except (OSError, RuntimeError) as exc:
+            return _json_error(f"Invalid project root: {exc}", 400)
+        if not root.is_dir():
+            return _json_error("Project root must be an existing directory.", 400)
+        _mkdocs_stop()
+        _set_project_root(root)
+    return jsonify(
+        {
+            "status": "ok",
+            "project_root": str(PROJECT_ROOT),
+            "project_root_locked": PROJECT_ROOT_LOCKED,
+            "mkdocs_path": str(MKDOCS_PATH),
+            "docs_root": str(DOCS_ROOT),
+        }
+    )
+
+
+@app.route("/api/project_root/pick", methods=["POST"])
+def api_pick_project_root():
+    """Open the native folder picker and return the selected project directory."""
+    if sys.platform != "darwin":
+        return _json_error("Native folder selection is currently available on macOS only.", 501)
+    try:
+        result = subprocess.run(
+            [
+                "osascript",
+                "-e",
+                'POSIX path of (choose folder with prompt "Choose the MkDocs project folder")',
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except FileNotFoundError:
+        return _json_error("The system folder picker is unavailable.", 503)
+    if result.returncode != 0:
+        # AppleScript uses a non-zero exit code when the user cancels.
+        return jsonify({"status": "cancelled"})
+    root = result.stdout.strip()
+    if not root:
+        return jsonify({"status": "cancelled"})
+    return jsonify({"status": "ok", "root": root})
 
 
 @app.route("/api/icons_index", methods=["GET"])

@@ -78,6 +78,57 @@ body.theme-light {
   margin-bottom: 10px;
 }
 
+.toolbar-start {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.project-root-btn {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border-color: rgba(106, 169, 255, 0.72);
+  background: rgba(106, 169, 255, 0.18);
+  color: var(--text);
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 0 0 1px rgba(106, 169, 255, 0.12), 0 8px 18px rgba(0, 0, 0, 0.12);
+}
+
+.project-root-btn svg {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.project-root-btn:hover {
+  background: rgba(106, 169, 255, 0.28);
+  border-color: rgba(106, 169, 255, 0.95);
+}
+
+.project-root-btn.active {
+  border-color: rgba(51, 209, 122, 0.75);
+  background: rgba(51, 209, 122, 0.16);
+}
+
+.project-root-btn.active svg {
+  color: var(--success);
+}
+
+body.theme-light .project-root-btn {
+  background: rgba(47, 111, 255, 0.12);
+  border-color: rgba(47, 111, 255, 0.55);
+}
+
+body.theme-light .project-root-btn.active {
+  background: rgba(26, 159, 90, 0.12);
+  border-color: rgba(26, 159, 90, 0.55);
+}
+
 .title {
   display: flex;
   flex-direction: column;

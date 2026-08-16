@@ -6,3 +6,5 @@ __pycache__/
 .page_tree_state.json
 MkDocs_Nav_Manager/backups/
 MkDocs_Nav_Manager/.page_tree_state.json
+MkDocs_Nav_Manager/.page_tree_state/
+MkDocs_Nav_Manager/.project_root.json

@@ -5,20 +5,30 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MkDocs Nav Manager</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=project-root-picker-2">
 </head>
 
 <body>
   <div class="shell">
     <header class="toolbar">
-      <div class="title">
-        <div class="title-row">
-          <h1>MkDocs Nav Manager</h1>
+      <div class="toolbar-start">
+        <div class="title">
+          <div class="title-row">
+            <h1>MkDocs Nav Manager</h1>
+          </div>
+          <div class="title-subline">
+            <div id="meta" class="muted">Loading...</div>
+            <div id="mkdocs-status" class="mkdocs-status" data-state="stopped">MkDocs: stopped</div>
+          </div>
         </div>
-        <div class="title-subline">
-          <div id="meta" class="muted">Loading...</div>
-          <div id="mkdocs-status" class="mkdocs-status" data-state="stopped">MkDocs: stopped</div>
-        </div>
+        <button id="project-root-btn" type="button" class="project-root-btn" data-help="Choose the MkDocs project folder">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M2.5 6.4h6L10.2 4h7.3v10.4a1.6 1.6 0 0 1-1.6 1.6H4.1a1.6 1.6 0 0 1-1.6-1.6V6.4z"/>
+            <path d="M2.5 8.4h15"/>
+            <path d="m10 10.5 1.9 1.9L10 14.3l-1.9-1.9L10 10.5z"/>
+          </svg>
+          <span id="project-root-label">Choose project</span>
+        </button>
       </div>
       <div class="inline-actions">
         <div class="mkdocs-actions" aria-label="MkDocs controls">
@@ -455,6 +465,8 @@
 	    document.addEventListener('DOMContentLoaded', async () => {
       els = {
         meta: document.getElementById('meta'),
+        projectRootBtn: document.getElementById('project-root-btn'),
+        projectRootLabel: document.getElementById('project-root-label'),
         mkdocsStatus: document.getElementById('mkdocs-status'),
         status: document.getElementById('status'),
         source: document.getElementById('source'),
@@ -550,7 +562,8 @@
 
 		      // Load mkdocs.yml from disk, overwrite current draft tree, and beautify nav formatting.
 		      els.toolImportBtn.addEventListener('click', () => importFromMkdocs({ confirm: true, beautify: true }));
-		      if (els.toolBeautifyNavBtn) els.toolBeautifyNavBtn.addEventListener('click', beautifyNav);
+	      if (els.toolBeautifyNavBtn) els.toolBeautifyNavBtn.addEventListener('click', beautifyNav);
+	      if (els.projectRootBtn) els.projectRootBtn.addEventListener('click', chooseProjectRoot);
 
       els.newFolderBtn.addEventListener('click', () => createNode('folder'));
       els.newPageBtn.addEventListener('click', () => createNode('page'));
@@ -3299,12 +3312,45 @@
         const data = await fetchJson('/api/meta');
         const text = `${data.mkdocs_path} | ${data.docs_root}`;
         docsRoot = data.docs_root || '';
+        const root = data.project_root || '';
+        const locked = !!data.project_root_locked;
+        if (els.projectRootLabel) els.projectRootLabel.textContent = locked ? 'Project locked' : 'Choose project';
+        if (els.projectRootBtn) {
+          els.projectRootBtn.classList.toggle('active', locked);
+          els.projectRootBtn.dataset.help = locked ? `Current project: ${root}` : 'Choose the MkDocs project folder';
+          els.projectRootBtn.title = els.projectRootBtn.dataset.help;
+        }
         els.meta.textContent = shortenPathLine(text);
         els.meta.title = text;
         setInfoMeta(text);
       } catch (e) {
         els.meta.textContent = '(meta unavailable)';
         setInfoMeta('(meta unavailable)');
+      }
+    }
+
+    async function chooseProjectRoot() {
+      if (els.projectRootBtn) els.projectRootBtn.disabled = true;
+      try {
+        setStatus('Opening folder picker…', 'info');
+        const picked = await fetchJson('/api/project_root/pick', { method: 'POST' });
+        if (!picked || picked.status === 'cancelled') return;
+        const root = picked.root || '';
+        await fetchJson('/api/project_root', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ root })
+        });
+        clearSelection();
+        selectedIds = new Set();
+        resetHistory();
+        await loadMeta();
+        await bootstrap();
+        setStatus('🔒 Project folder saved.', 'success');
+      } catch (e) {
+        setStatus(e.message || 'Could not select project folder.', 'error');
+      } finally {
+        if (els.projectRootBtn) els.projectRootBtn.disabled = false;
       }
     }
 

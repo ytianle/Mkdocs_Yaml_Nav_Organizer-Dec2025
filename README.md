@@ -54,14 +54,19 @@
 
 Open: `http://127.0.0.1:5000`
 
+### Lock a Project Root
+
+Click **Choose project** and select the folder containing `mkdocs.yml`. The selection is restored the next time the manager starts.
+
 ![night](night.png)
 ![day](day.png)
 
 ## Defaults
 
 - `mkdocs.yml`: project root `mkdocs.yml` (override with `MKDOCS_PATH`)
+- Project root: saved automatically; `MKDOCS_PATH` / `MKDOCS_FILE` takes precedence
 - `docs_root`: uses `docs_dir` when set, otherwise auto-detects `docs/` or `doc/` (override with `DOCS_ROOT`)
-- State file: `MkDocs_Nav_Manager/.page_tree_state.json` (override with `STATE_PATH`)
+- State file: `MkDocs_Nav_Manager/.page_tree_state.json`; locked projects use separate files under `MkDocs_Nav_Manager/.page_tree_state/` (override with `STATE_PATH`)
 - Backups: creates `MkDocs_Nav_Manager/backups/mkdocs/` (keeps latest 5), disable with `MKDOCS_BACKUP=0`
 
 ## Troubleshooting
